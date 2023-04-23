@@ -1,4 +1,5 @@
 use clap::Parser;
+use inquire::{InquireError, Select};
 use std::{env, path::PathBuf};
 
 /// Simple utility to find the closest matches to a reference file in a
@@ -87,7 +88,21 @@ fn main() {
         grid.add(Cell::from(perc_str));
     }
 
-    println!("{}", grid.fit_into_columns(2));
-    // let grid_str = grid.fit_into_columns(2).to_string();
-    // dbg!(grid_str);
+    let grid_str = grid.fit_into_columns(2).to_string();
+    let mut grid_options: Vec<_> = grid_str.split('\n').collect();
+
+    // Remove the last new line
+    grid_options.remove(grid_options.len() - 1);
+    dbg!(&grid_options);
+
+    // TODO create custom struct that implements display() in order to retain
+    // paths for comparison if selected.
+
+    let ans: Result<&str, InquireError> =
+        Select::new(grid_options[0], grid_options[1..].to_vec()).prompt();
+
+    match ans {
+        Ok(choice) => println!("\n---\n{}! That's mine too!", choice),
+        Err(_) => println!("There was an error, please try again"),
+    }
 }

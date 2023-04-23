@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.2.4", features = ["derive"] }
+inquire = "0.6.1"
 similar = "2.2.1"
 term_grid = "0.2.0"
 walkdir = "2.3.3"
