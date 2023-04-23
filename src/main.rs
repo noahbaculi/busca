@@ -22,7 +22,7 @@ struct InputArgs {
 #[derive(Debug)]
 struct Args {
     ref_file_path: PathBuf,
-    search: busca::Search,
+    search_path: PathBuf,
     count: u8,
 }
 
@@ -40,21 +40,12 @@ fn validate_args(input_args: InputArgs) -> Args {
         .clone()
         .unwrap_or(env::current_dir().unwrap());
 
-    let search_kind: busca::SearchKind;
-    if search_path.is_file() {
-        search_kind = busca::SearchKind::File;
-    } else if search_path.is_dir() {
-        search_kind = busca::SearchKind::Directory;
-    } else {
+    if !search_path.is_file() & !search_path.is_dir() {
         panic!(
             "The search path '{}' could not be found",
             search_path.display()
         );
     }
-    let search = busca::Search {
-        path: search_path,
-        kind: search_kind,
-    };
 
     let mut count = input_args.count;
     if (count == 0) | (count > 200) {
@@ -63,7 +54,7 @@ fn validate_args(input_args: InputArgs) -> Args {
 
     Args {
         ref_file_path: input_args.ref_file_path,
-        search,
+        search_path,
         count,
     }
 }
@@ -74,6 +65,6 @@ fn main() {
     let args = validate_args(input_args);
     dbg!(&args.count);
 
-    let _result = busca::run_search(args.ref_file_path, args.search).unwrap();
+    let _result = busca::run_search(args.ref_file_path, args.search_path).unwrap();
     // println!("{}", _result);
 }
