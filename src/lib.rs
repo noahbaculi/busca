@@ -30,19 +30,14 @@ use walkdir::WalkDir;
 pub fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> i32 {
     let diff = TextDiff::from_lines(ref_lines, comp_lines);
 
-    let mut num_shared_lines = 0;
+    // let mut num_shared_lines = 0;
     // Increment the number of shared lines for each equal line
-    // TODO try functional pattern
-    for change in diff.iter_all_changes() {
-        // dbg!(change, change.missing_newline());
-        // println!("---");
+    let num_shared_lines = diff
+        .iter_all_changes()
+        .filter(|change| change.tag() == ChangeTag::Equal)
+        .count();
 
-        if change.tag() == ChangeTag::Equal {
-            num_shared_lines += 1
-        };
-    }
-
-    num_shared_lines
+    num_shared_lines.try_into().unwrap()
 }
 
 /// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
