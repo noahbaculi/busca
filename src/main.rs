@@ -72,7 +72,8 @@ fn main() {
     let input_args = InputArgs::parse();
 
     let args = validate_args(input_args);
+    dbg!(&args.count);
 
     let _result = busca::run_search(args.ref_file_path, args.search).unwrap();
-    // println!("{}", _result)
+    // println!("{}", _result);
 }
