@@ -66,5 +66,5 @@ fn main() {
     dbg!(&args.count);
 
     let _result = busca::run_search(args.ref_file_path, args.search_path).unwrap();
-    // println!("{}", _result);
+    println!("{:?}", _result);
 }
