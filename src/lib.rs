@@ -5,7 +5,29 @@ use std::fs;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
-fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> i32 {
+/// Returns the number of lines from `ref_lines` that also exist in `comp_lines`.
+///
+/// Note: Final new lines are included in the diff comparisons.
+///
+/// # Examples
+///
+/// ```
+/// //                ✓   ✓  x   ✓   x      = 3
+/// let ref_lines = "12\n14\n5\n17\n19\n";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_num_shared_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 3);
+/// ```
+/// ---
+/// ```
+/// //                ✓   ✓  x   x    = 2
+/// let ref_lines = "12\n14\n5\n17";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_num_shared_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 2);
+/// ```
+///
+pub fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> i32 {
     let diff = TextDiff::from_lines(ref_lines, comp_lines);
 
     let mut num_shared_lines = 0;
@@ -23,11 +45,28 @@ fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> i32 {
     num_shared_lines
 }
 
-fn get_perc_shared_lines(ref_lines: &str, comp_file_path: &PathBuf) -> f32 {
-    // Read files
-    let comp_lines = fs::read_to_string(comp_file_path).unwrap();
-
-    let num_shared_lines = get_num_shared_lines(ref_lines, &comp_lines);
+/// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
+///
+/// # Examples
+///
+/// ```
+/// //                ✓   ✓  x   ✓   x      = 3 / 5 = 0.6
+/// let ref_lines = "12\n14\n5\n17\n19\n";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_perc_shared_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 0.6);
+/// ```
+/// ---
+/// ```
+/// //                ✓   ✓  x   x    = 2 / 4 = 0.5
+/// let ref_lines = "12\n14\n5\n17";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_perc_shared_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 0.5);
+/// ```
+///
+pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
+    let num_shared_lines = get_num_shared_lines(ref_lines, comp_lines);
 
     // If ref file ends with a newline, do not count it as line compared
     let mut num_ref_lines = ref_lines.split('\n').count();
@@ -55,22 +94,10 @@ pub fn run_search(
             continue;
         }
 
-        let perc_shared = get_perc_shared_lines(&ref_lines, &path_in_dir);
+        let comp_lines = fs::read_to_string(&path_in_dir).unwrap();
+        let perc_shared = get_perc_shared_lines(&ref_lines, &comp_lines);
         path_to_perc_shared.insert(path_in_dir.clone(), perc_shared);
     }
 
     Ok(path_to_perc_shared)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn get_num_shared_lines_standard() {
-        let ref_lines = "2\n4\n";
-        let comp_lines = "1\n2\n3\n4\n5\n";
-
-        assert_eq!(get_num_shared_lines(ref_lines, comp_lines), 2);
-    }
 }
