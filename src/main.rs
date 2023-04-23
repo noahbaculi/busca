@@ -64,10 +64,30 @@ fn main() {
 
     let args = validate_args(input_args);
 
-    let mut path_to_perc_shared = busca::run_search(args.ref_file_path, args.search_path).unwrap();
+    let mut search_results = busca::run_search(args.ref_file_path, args.search_path).unwrap();
 
-    path_to_perc_shared.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    search_results.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
 
-    path_to_perc_shared.truncate(args.count.into());
-    dbg!(&path_to_perc_shared);
+    search_results.truncate(args.count.into());
+
+    use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+
+    let mut grid = Grid::new(GridOptions {
+        filling: Filling::Spaces(5),
+        direction: Direction::LeftToRight,
+    });
+
+    grid.add(Cell::from("Path"));
+    grid.add(Cell::from("Match"));
+
+    for path_and_perc in search_results {
+        grid.add(Cell::from(path_and_perc.path.display().to_string()));
+
+        let perc_str = format!("{:.1}%", (path_and_perc.perc_shared * 100.0));
+        grid.add(Cell::from(perc_str));
+    }
+
+    println!("{}", grid.fit_into_columns(2));
+    // let grid_str = grid.fit_into_columns(2).to_string();
+    // dbg!(grid_str);
 }

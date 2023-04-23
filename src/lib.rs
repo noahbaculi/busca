@@ -71,10 +71,15 @@ pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
     num_shared_lines as f32 / num_ref_lines as f32
 }
 
+pub struct FileMatch {
+    pub path: PathBuf,
+    pub perc_shared: f32,
+}
+
 pub fn run_search(
     ref_file_path: PathBuf,
     search_path: PathBuf,
-) -> Result<Vec<(PathBuf, f32)>, Box<dyn Error>> {
+) -> Result<Vec<FileMatch>, Box<dyn Error>> {
     let mut path_to_perc_shared = Vec::new();
 
     let ref_lines = fs::read_to_string(ref_file_path).unwrap();
@@ -90,7 +95,10 @@ pub fn run_search(
 
         let comp_lines = fs::read_to_string(&path_in_dir).unwrap();
         let perc_shared = get_perc_shared_lines(&ref_lines, &comp_lines);
-        path_to_perc_shared.push((path_in_dir.clone(), perc_shared));
+        path_to_perc_shared.push(FileMatch {
+            path: path_in_dir.clone(),
+            perc_shared,
+        });
     }
 
     Ok(path_to_perc_shared)
