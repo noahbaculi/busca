@@ -63,8 +63,11 @@ fn main() {
     let input_args = InputArgs::parse();
 
     let args = validate_args(input_args);
-    dbg!(&args.count);
 
-    let _result = busca::run_search(args.ref_file_path, args.search_path).unwrap();
-    println!("{:?}", _result);
+    let mut path_to_perc_shared = busca::run_search(args.ref_file_path, args.search_path).unwrap();
+
+    path_to_perc_shared.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+    path_to_perc_shared.truncate(args.count.into());
+    dbg!(&path_to_perc_shared);
 }
