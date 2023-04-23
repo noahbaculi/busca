@@ -1,5 +1,6 @@
 use similar::{ChangeTag, TextDiff};
 use std::error::Error;
+use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 use walkdir::WalkDir;
@@ -75,12 +76,56 @@ pub struct FileMatch {
     pub path: PathBuf,
     pub perc_shared: f32,
 }
+pub struct FileMatches(Vec<FileMatch>);
+
+// impl FileMatches {}
+
+impl std::ops::Deref for FileMatches {
+    type Target = Vec<FileMatch>;
+    fn deref(&self) -> &Vec<FileMatch> {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for FileMatches {
+    fn deref_mut(&mut self) -> &mut Vec<FileMatch> {
+        &mut self.0
+    }
+}
+
+impl fmt::Display for FileMatches {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
+
+        let mut grid = Grid::new(GridOptions {
+            filling: Filling::Spaces(2),
+            direction: Direction::LeftToRight,
+        });
+
+        for path_and_perc in self.iter() {
+            grid.add(Cell::from(path_and_perc.path.display().to_string()));
+
+            let visual_indicator = "+".repeat((path_and_perc.perc_shared * 10.0).round() as usize);
+            let mut vis_cell = Cell::from(visual_indicator);
+            // vis_cell.alignment = Alignment::Right;
+            grid.add(vis_cell);
+
+            let perc_str = format!("{:.1}%", (path_and_perc.perc_shared * 100.0));
+            let mut perc_cell = Cell::from(perc_str);
+            perc_cell.alignment = Alignment::Right;
+            grid.add(perc_cell);
+        }
+
+        let grid_str = grid.fit_into_columns(3).to_string();
+        write!(f, "{}", grid_str)
+    }
+}
 
 pub fn run_search(
     ref_file_path: PathBuf,
     search_path: PathBuf,
-) -> Result<Vec<FileMatch>, Box<dyn Error>> {
-    let mut path_to_perc_shared = Vec::new();
+) -> Result<FileMatches, Box<dyn Error>> {
+    let mut path_to_perc_shared = FileMatches(Vec::new());
 
     let ref_lines = fs::read_to_string(ref_file_path).unwrap();
 

@@ -71,25 +71,10 @@ fn main() {
 
     search_results.truncate(args.count.into());
 
-    use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+    println!("{}", &search_results);
 
-    let mut grid = Grid::new(GridOptions {
-        filling: Filling::Spaces(5),
-        direction: Direction::LeftToRight,
-    });
-
-    grid.add(Cell::from("Path"));
-    grid.add(Cell::from("Match"));
-
-    for path_and_perc in search_results {
-        grid.add(Cell::from(path_and_perc.path.display().to_string()));
-
-        let perc_str = format!("{:.1}%", (path_and_perc.perc_shared * 100.0));
-        grid.add(Cell::from(perc_str));
-    }
-
-    let grid_str = grid.fit_into_columns(2).to_string();
-    let mut grid_options: Vec<_> = grid_str.split('\n').collect();
+    let file_matches = &search_results.to_string();
+    let mut grid_options: Vec<_> = file_matches.split('\n').collect();
 
     // Remove the last new line
     grid_options.remove(grid_options.len() - 1);
@@ -99,10 +84,10 @@ fn main() {
     // paths for comparison if selected.
 
     let ans: Result<&str, InquireError> =
-        Select::new(grid_options[0], grid_options[1..].to_vec()).prompt();
+        Select::new("Select a file to compare:", grid_options).prompt();
 
     match ans {
-        Ok(choice) => println!("\n---\n{}! That's mine too!", choice),
+        Ok(choice) => println!("\n---\n{:?}! That's mine too!", choice),
         Err(_) => println!("There was an error, please try again"),
     }
 }
