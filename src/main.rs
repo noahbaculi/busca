@@ -1,12 +1,16 @@
 use clap::Parser;
-use inquire::{InquireError, Select};
-use std::{env, path::PathBuf};
+use console::{style, Style};
+use inquire::Select;
+use similar::{ChangeTag, TextDiff};
+use std::fmt;
+use std::{env, fs, path::PathBuf};
 
 /// Simple utility to find the closest matches to a reference file in a
 /// directory based on the number of lines in the reference file that exist in
 /// each compared file.
 #[derive(Parser, Debug)]
 #[command(author="Noah Baculi", version, about, long_about = None)]
+
 struct InputArgs {
     /// Local or absolute path to the reference comparison file
     ref_file_path: PathBuf,
@@ -60,18 +64,29 @@ fn validate_args(input_args: InputArgs) -> Args {
     }
 }
 
+struct Line(Option<usize>);
+
+impl fmt::Display for Line {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            None => write!(f, "    "),
+            Some(idx) => write!(f, "{:<4}", idx + 1),
+        }
+    }
+}
+
 fn main() {
     let input_args = InputArgs::parse();
 
     let args = validate_args(input_args);
 
-    let mut search_results = busca::run_search(args.ref_file_path, args.search_path).unwrap();
+    let mut search_results = busca::run_search(&args.ref_file_path, &args.search_path).unwrap();
 
     search_results.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
 
     search_results.truncate(args.count.into());
 
-    println!("{}", &search_results);
+    // println!("{}", &search_results);
 
     let file_matches = &search_results.to_string();
     let mut grid_options: Vec<_> = file_matches.split('\n').collect();
@@ -80,14 +95,46 @@ fn main() {
     grid_options.remove(grid_options.len() - 1);
     dbg!(&grid_options);
 
-    // TODO create custom struct that implements display() in order to retain
-    // paths for comparison if selected.
+    let ans = Select::new("Select a file to compare:", grid_options)
+        .raw_prompt()
+        .expect("Prompt response should be valid");
 
-    let ans: Result<&str, InquireError> =
-        Select::new("Select a file to compare:", grid_options).prompt();
+    let selected_search = &search_results[*&ans.index];
+    let selected_search_path = &selected_search.path;
 
-    match ans {
-        Ok(choice) => println!("\n---\n{:?}! That's mine too!", choice),
-        Err(_) => println!("There was an error, please try again"),
+    let ref_lines = fs::read_to_string(&args.ref_file_path).unwrap();
+    let comp_lines = fs::read_to_string(&selected_search_path).unwrap();
+
+    let diff = TextDiff::from_lines(&ref_lines, &comp_lines);
+
+    for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
+        if idx > 0 {
+            println!("{:-^1$}", "-", 80);
+        }
+        for op in group {
+            for change in diff.iter_inline_changes(op) {
+                let (sign, s) = match change.tag() {
+                    ChangeTag::Delete => ("-", Style::new().red()),
+                    ChangeTag::Insert => ("+", Style::new().green()),
+                    ChangeTag::Equal => (" ", Style::new().dim()),
+                };
+                print!(
+                    "{}{} {} |",
+                    style(Line(change.old_index())).dim(),
+                    style(Line(change.new_index())).dim(),
+                    s.apply_to(sign).bold(),
+                );
+                for (emphasized, value) in change.iter_strings_lossy() {
+                    if emphasized {
+                        print!("{}", s.apply_to(value).underlined().on_black());
+                    } else {
+                        print!("{}", s.apply_to(value));
+                    }
+                }
+                if change.missing_newline() {
+                    println!();
+                }
+            }
+        }
     }
 }

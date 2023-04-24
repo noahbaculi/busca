@@ -2,7 +2,9 @@ use similar::{ChangeTag, TextDiff};
 use std::error::Error;
 use std::fmt;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::PathBuf;
+use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use walkdir::WalkDir;
 
 /// Returns the number of lines from `ref_lines` that also exist in `comp_lines`.
@@ -71,11 +73,12 @@ pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
 
     num_shared_lines as f32 / num_ref_lines as f32
 }
-
+#[derive(Debug, Clone)]
 pub struct FileMatch {
     pub path: PathBuf,
     pub perc_shared: f32,
 }
+#[derive(Debug, Clone)]
 pub struct FileMatches(Vec<FileMatch>);
 
 // impl FileMatches {}
@@ -93,10 +96,16 @@ impl std::ops::DerefMut for FileMatches {
     }
 }
 
+impl FileMatches {
+    pub fn max_path_width(&self) -> Option<usize> {
+        self.iter()
+            .map(|x| x.path.display().to_string().chars().count())
+            .max()
+    }
+}
+
 impl fmt::Display for FileMatches {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
-
         let mut grid = Grid::new(GridOptions {
             filling: Filling::Spaces(2),
             direction: Direction::LeftToRight,
@@ -106,8 +115,7 @@ impl fmt::Display for FileMatches {
             grid.add(Cell::from(path_and_perc.path.display().to_string()));
 
             let visual_indicator = "+".repeat((path_and_perc.perc_shared * 10.0).round() as usize);
-            let mut vis_cell = Cell::from(visual_indicator);
-            // vis_cell.alignment = Alignment::Right;
+            let vis_cell = Cell::from(visual_indicator);
             grid.add(vis_cell);
 
             let perc_str = format!("{:.1}%", (path_and_perc.perc_shared * 100.0));
@@ -116,21 +124,24 @@ impl fmt::Display for FileMatches {
             grid.add(perc_cell);
         }
 
-        let grid_str = grid.fit_into_columns(3).to_string();
+        let disp = grid.fit_into_columns(3);
+
+        let grid_str = disp.to_string();
         write!(f, "{}", grid_str)
     }
 }
-
 pub fn run_search(
-    ref_file_path: PathBuf,
-    search_path: PathBuf,
+    ref_file_path: &PathBuf,
+    search_path: &PathBuf,
 ) -> Result<FileMatches, Box<dyn Error>> {
     let mut path_to_perc_shared = FileMatches(Vec::new());
 
     let ref_lines = fs::read_to_string(ref_file_path).unwrap();
 
     // Walk through search path
-    for dir_entry_result in WalkDir::new(&search_path.into_os_string().into_string().unwrap()) {
+    for dir_entry_result in
+        WalkDir::new(search_path.clone().into_os_string().into_string().unwrap())
+    {
         let path_in_dir = dir_entry_result?.into_path();
 
         // Skip paths that are not files
@@ -138,7 +149,17 @@ pub fn run_search(
             continue;
         }
 
-        let comp_lines = fs::read_to_string(&path_in_dir).unwrap();
+        dbg!(&path_in_dir);
+
+        let comp_reader = fs::read_to_string(&path_in_dir);
+        let comp_lines = match comp_reader {
+            Ok(lines) => lines,
+            Err(error) => match error.kind() {
+                ErrorKind::InvalidData => continue,
+                other_error => panic!("{:?}", other_error),
+            },
+        };
+
         let perc_shared = get_perc_shared_lines(&ref_lines, &comp_lines);
         path_to_perc_shared.push(FileMatch {
             path: path_in_dir.clone(),
