@@ -15,6 +15,7 @@ cargo build --release
 ```
 
 TODO: Add to path...
+
 ```shell
 export PATH=/Users/username/bin:$PATH ???
 ```

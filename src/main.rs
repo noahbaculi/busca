@@ -4,6 +4,7 @@ use console::{style, Style};
 use indicatif::ProgressBar;
 use indicatif::ProgressState;
 use indicatif::ProgressStyle;
+use inquire::InquireError;
 use inquire::Select;
 use similar::{ChangeTag, TextDiff};
 use std::env;
@@ -15,6 +16,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::process;
+use std::process::exit;
 use walkdir::WalkDir;
 
 /// Simple utility to find the closest matches to a reference file in a
@@ -179,6 +181,11 @@ impl fmt::Display for Line {
     }
 }
 
+fn graceful_panic(error: impl Error) -> ! {
+    eprintln!("{}", &error);
+    exit(1);
+}
+
 fn main() {
     let input_args = InputArgs::parse();
 
@@ -201,24 +208,27 @@ fn main() {
 
     // Remove the last new line
     grid_options.remove(grid_options.len() - 1);
-    // dbg!(&grid_options);
 
-    if grid_options.len() == 0 {
-        println!("No files found.");
+    if grid_options.is_empty() {
+        println!("No files found that match the criteria.");
         process::exit(0);
     }
 
-    let ans = Select::new("Select a file to compare:", grid_options)
-        .raw_prompt()
-        .expect("Prompt response should be valid");
+    let ans = match Select::new("Select a file to compare:", grid_options).raw_prompt() {
+        Ok(answer) => answer,
+        Err(InquireError::OperationCanceled) => exit(0),
+        Err(err) => graceful_panic(err),
+    };
 
-    let selected_search = &search_results[*&ans.index];
+    let selected_search = &search_results[ans.index];
     let selected_search_path = &selected_search.path;
-
     let ref_lines = fs::read_to_string(&args.ref_file_path).unwrap();
-    let comp_lines = fs::read_to_string(&selected_search_path).unwrap();
+    let comp_lines = fs::read_to_string(selected_search_path).unwrap();
+    output_detailed_diff(&ref_lines, &comp_lines);
+}
 
-    let diff = TextDiff::from_lines(&ref_lines, &comp_lines);
+fn output_detailed_diff(ref_lines: &str, comp_lines: &str) {
+    let diff = TextDiff::from_lines(ref_lines, comp_lines);
 
     for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
         if idx > 0 {
