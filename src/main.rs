@@ -80,7 +80,9 @@ fn main() {
 
     let args = validate_args(input_args);
 
+    let now = std::time::Instant::now();
     let mut search_results = busca::run_search(&args.ref_file_path, &args.search_path).unwrap();
+    println!("* COmpleted search in {} sec", now.elapsed().as_secs());
 
     search_results.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
 

@@ -1,5 +1,6 @@
 use similar::{ChangeTag, TextDiff};
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
 use std::io::ErrorKind;
@@ -138,6 +139,12 @@ pub fn run_search(
 
     let ref_lines = fs::read_to_string(ref_file_path).unwrap();
 
+    let test = WalkDir::new(search_path.clone().into_os_string().into_string().unwrap())
+        .into_iter()
+        .count();
+
+    dbg!(test);
+
     // Walk through search path
     for dir_entry_result in
         WalkDir::new(search_path.clone().into_os_string().into_string().unwrap())
@@ -149,7 +156,12 @@ pub fn run_search(
             continue;
         }
 
-        dbg!(&path_in_dir);
+        let extension = path_in_dir.extension().unwrap_or(OsStr::new(""));
+
+        if !(extension == "py") {
+            continue;
+        }
+        // dbg!(&path_in_dir);
 
         let comp_reader = fs::read_to_string(&path_in_dir);
         let comp_lines = match comp_reader {
@@ -159,6 +171,11 @@ pub fn run_search(
                 other_error => panic!("{:?}", other_error),
             },
         };
+
+        if comp_lines.len() > 80 * 10_000 {
+            println!("** Skipping bc file is too long...");
+            continue;
+        }
 
         let perc_shared = get_perc_shared_lines(&ref_lines, &comp_lines);
         path_to_perc_shared.push(FileMatch {
