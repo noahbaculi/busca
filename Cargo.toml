@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.2.4", features = ["derive"] }
 console = "0.15.5"
+indicatif = "0.17.3"
 inquire = "0.6.1"
 similar = { version = "2.2.1", features = ["inline"] }
 term_grid = "0.2.0"

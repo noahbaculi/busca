@@ -1,12 +1,16 @@
 use busca::{FileMatch, FileMatches};
 use clap::Parser;
 use console::{style, Style};
+use indicatif::ProgressBar;
+use indicatif::ProgressState;
+use indicatif::ProgressStyle;
 use inquire::Select;
 use similar::{ChangeTag, TextDiff};
 use std::env;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
+use std::fmt::Write;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -99,15 +103,28 @@ pub fn run_search(
     let search_root = search_path.clone().into_os_string().into_string().unwrap();
 
     let num_files = WalkDir::new(&search_root).into_iter().count();
-    dbg!(num_files);
+
+    // Create progress bar
+    let progress_bar = ProgressBar::new(num_files.try_into().unwrap());
+    progress_bar.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
+        )
+        .unwrap()
+        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| {
+            write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
+        })
+        .progress_chars("#>-"),
+    );
 
     // Walk through search path
-    let walkdir_iter = WalkDir::new(&search_root)
-        .into_iter()
-        .filter_map(|e| e.ok());
+    for dir_entry_result in WalkDir::new(&search_root) {
+        progress_bar.inc(1);
+        if dir_entry_result.is_err() {
+            continue;
+        }
 
-    for dir_entry_result in walkdir_iter {
-        let path_in_dir = dir_entry_result.into_path();
+        let path_in_dir = dir_entry_result.unwrap().into_path();
 
         // Skip paths that are not files
         if !path_in_dir.is_file() {
@@ -140,14 +157,13 @@ pub fn run_search(
             continue;
         }
 
-        // dbg!(&path_in_dir);
-
         let perc_shared = busca::get_perc_shared_lines(&ref_lines, &comp_lines);
         path_to_perc_shared.push(FileMatch {
             path: path_in_dir.clone(),
             perc_shared,
         });
     }
+    progress_bar.finish();
 
     Ok(path_to_perc_shared)
 }
@@ -168,7 +184,6 @@ fn main() {
 
     let args = validate_args(input_args);
 
-    let now = std::time::Instant::now();
     let mut search_results = run_search(
         &args.ref_file_path,
         &args.search_path,
@@ -176,7 +191,6 @@ fn main() {
         &args.max_lines,
     )
     .unwrap();
-    println!("* Completed search in {} sec", now.elapsed().as_secs());
 
     search_results.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
 
@@ -187,7 +201,7 @@ fn main() {
 
     // Remove the last new line
     grid_options.remove(grid_options.len() - 1);
-    dbg!(&grid_options);
+    // dbg!(&grid_options);
 
     if grid_options.len() == 0 {
         println!("No files found.");
