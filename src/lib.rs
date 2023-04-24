@@ -1,12 +1,7 @@
 use similar::{ChangeTag, TextDiff};
-use std::error::Error;
-use std::ffi::OsStr;
 use std::fmt;
-use std::fs;
-use std::io::ErrorKind;
 use std::path::PathBuf;
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
-use walkdir::WalkDir;
 
 /// Returns the number of lines from `ref_lines` that also exist in `comp_lines`.
 ///
@@ -80,7 +75,7 @@ pub struct FileMatch {
     pub perc_shared: f32,
 }
 #[derive(Debug, Clone)]
-pub struct FileMatches(Vec<FileMatch>);
+pub struct FileMatches(pub Vec<FileMatch>);
 
 // impl FileMatches {}
 
@@ -130,70 +125,4 @@ impl fmt::Display for FileMatches {
         let grid_str = disp.to_string();
         write!(f, "{}", grid_str)
     }
-}
-
-pub fn run_search(
-    ref_file_path: &PathBuf,
-    search_path: &PathBuf,
-    extensions: &Option<Vec<String>>,
-    max_lines: &u32,
-) -> Result<FileMatches, Box<dyn Error>> {
-    let mut path_to_perc_shared = FileMatches(Vec::new());
-
-    let ref_lines = fs::read_to_string(ref_file_path).unwrap();
-
-    let search_root = search_path.clone().into_os_string().into_string().unwrap();
-
-    let num_files = WalkDir::new(&search_root).into_iter().count();
-    dbg!(num_files);
-
-    // Walk through search path
-    let walkdir_iter = WalkDir::new(&search_root)
-        .into_iter()
-        .filter_map(|e| e.ok());
-
-    for dir_entry_result in walkdir_iter {
-        let path_in_dir = dir_entry_result.into_path();
-
-        // Skip paths that are not files
-        if !path_in_dir.is_file() {
-            continue;
-        }
-
-        let extension = path_in_dir
-            .extension()
-            .unwrap_or(OsStr::new(""))
-            .to_os_string()
-            .into_string()
-            .unwrap_or("".to_string());
-
-        if (extensions.is_some()) && !(extensions.clone().unwrap().contains(&extension)) {
-            continue;
-        }
-
-        let comp_reader = fs::read_to_string(&path_in_dir);
-        let comp_lines = match comp_reader {
-            Ok(lines) => lines,
-            Err(error) => match error.kind() {
-                ErrorKind::InvalidData => continue,
-                other_error => panic!("{:?}", other_error),
-            },
-        };
-
-        let num_comp_lines = comp_lines.clone().lines().count();
-
-        if (num_comp_lines > *max_lines as usize) | (num_comp_lines == 0) {
-            continue;
-        }
-
-        // dbg!(&path_in_dir);
-
-        let perc_shared = get_perc_shared_lines(&ref_lines, &comp_lines);
-        path_to_perc_shared.push(FileMatch {
-            path: path_in_dir.clone(),
-            perc_shared,
-        });
-    }
-
-    Ok(path_to_perc_shared)
 }
