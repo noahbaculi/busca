@@ -24,6 +24,11 @@ struct InputArgs {
     #[arg(short, long)]
     ext: Vec<String>,
 
+    /// The number of lines to consider when comparing files. Files with more
+    /// lines will be skipped.
+    #[arg(short, long, default_value_t = 10_000)]
+    max_lines: u32,
+
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
     count: u8,
@@ -34,6 +39,7 @@ struct Args {
     ref_file_path: PathBuf,
     search_path: PathBuf,
     extensions: Vec<String>,
+    max_lines: u32,
     count: u8,
 }
 
@@ -67,6 +73,7 @@ fn validate_args(input_args: InputArgs) -> Args {
         ref_file_path: input_args.ref_file_path,
         search_path,
         extensions: input_args.ext,
+        max_lines: input_args.max_lines,
         count,
     }
 }
@@ -90,8 +97,13 @@ fn main() {
     let args = validate_args(input_args);
 
     let now = std::time::Instant::now();
-    let mut search_results =
-        busca::run_search(&args.ref_file_path, &args.search_path, &args.extensions).unwrap();
+    let mut search_results = busca::run_search(
+        &args.ref_file_path,
+        &args.search_path,
+        &args.extensions,
+        &args.max_lines,
+    )
+    .unwrap();
     println!("* Completed search in {} sec", now.elapsed().as_secs());
 
     search_results.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());

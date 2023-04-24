@@ -131,10 +131,12 @@ impl fmt::Display for FileMatches {
         write!(f, "{}", grid_str)
     }
 }
+
 pub fn run_search(
     ref_file_path: &PathBuf,
     search_path: &PathBuf,
     extensions: &Vec<String>,
+    max_lines: &u32,
 ) -> Result<FileMatches, Box<dyn Error>> {
     let mut path_to_perc_shared = FileMatches(Vec::new());
 
@@ -167,7 +169,6 @@ pub fn run_search(
         if !(extensions.contains(&extension.into_string().unwrap())) {
             continue;
         }
-        // dbg!(&path_in_dir);
 
         let comp_reader = fs::read_to_string(&path_in_dir);
         let comp_lines = match comp_reader {
@@ -178,10 +179,13 @@ pub fn run_search(
             },
         };
 
-        if comp_lines.len() > 80 * 10_000 {
-            println!("** Skipping bc file is too long...");
+        let num_comp_lines = comp_lines.clone().lines().count();
+
+        if (num_comp_lines > *max_lines as usize) | (num_comp_lines == 0) {
             continue;
         }
+
+        dbg!(&path_in_dir);
 
         let perc_shared = get_perc_shared_lines(&ref_lines, &comp_lines);
         path_to_perc_shared.push(FileMatch {
