@@ -2,8 +2,8 @@ use clap::Parser;
 use console::{style, Style};
 use inquire::Select;
 use similar::{ChangeTag, TextDiff};
-use std::fmt;
 use std::{env, fs, path::PathBuf};
+use std::{fmt, process};
 
 /// Simple utility to find the closest matches to a reference file in a
 /// directory based on the number of lines in the reference file that exist in
@@ -22,7 +22,7 @@ struct InputArgs {
     /// File extensions to include in the search. ex: `-e py -e json`. Defaults to all files with
     /// valid UTF-8 contents
     #[arg(short, long)]
-    ext: Vec<String>,
+    ext: Option<Vec<String>>,
 
     /// The number of lines to consider when comparing files. Files with more
     /// lines will be skipped.
@@ -38,7 +38,7 @@ struct InputArgs {
 struct Args {
     ref_file_path: PathBuf,
     search_path: PathBuf,
-    extensions: Vec<String>,
+    extensions: Option<Vec<String>>,
     max_lines: u32,
     count: u8,
 }
@@ -116,6 +116,11 @@ fn main() {
     // Remove the last new line
     grid_options.remove(grid_options.len() - 1);
     dbg!(&grid_options);
+
+    if grid_options.len() == 0 {
+        println!("No files found.");
+        process::exit(0);
+    }
 
     let ans = Select::new("Select a file to compare:", grid_options)
         .raw_prompt()

@@ -135,7 +135,7 @@ impl fmt::Display for FileMatches {
 pub fn run_search(
     ref_file_path: &PathBuf,
     search_path: &PathBuf,
-    extensions: &Vec<String>,
+    extensions: &Option<Vec<String>>,
     max_lines: &u32,
 ) -> Result<FileMatches, Box<dyn Error>> {
     let mut path_to_perc_shared = FileMatches(Vec::new());
@@ -144,16 +144,15 @@ pub fn run_search(
 
     let search_root = search_path.clone().into_os_string().into_string().unwrap();
 
-    let test = WalkDir::new(&search_root).into_iter().count();
-
-    dbg!(test);
+    let num_files = WalkDir::new(&search_root).into_iter().count();
+    dbg!(num_files);
 
     // Walk through search path
-    let walkdir = WalkDir::new(&search_root)
+    let walkdir_iter = WalkDir::new(&search_root)
         .into_iter()
         .filter_map(|e| e.ok());
 
-    for dir_entry_result in walkdir {
+    for dir_entry_result in walkdir_iter {
         let path_in_dir = dir_entry_result.into_path();
 
         // Skip paths that are not files
@@ -164,9 +163,11 @@ pub fn run_search(
         let extension = path_in_dir
             .extension()
             .unwrap_or(OsStr::new(""))
-            .to_os_string();
+            .to_os_string()
+            .into_string()
+            .unwrap_or("".to_string());
 
-        if !(extensions.contains(&extension.into_string().unwrap())) {
+        if (extensions.is_some()) && !(extensions.clone().unwrap().contains(&extension)) {
             continue;
         }
 
