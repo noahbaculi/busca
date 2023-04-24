@@ -186,7 +186,7 @@ pub fn run_search(
             continue;
         }
 
-        dbg!(&path_in_dir);
+        // dbg!(&path_in_dir);
 
         let perc_shared = get_perc_shared_lines(&ref_lines, &comp_lines);
         path_to_perc_shared.push(FileMatch {

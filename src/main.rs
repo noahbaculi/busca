@@ -92,8 +92,6 @@ impl fmt::Display for Line {
 fn main() {
     let input_args = InputArgs::parse();
 
-    dbg!(&input_args);
-
     let args = validate_args(input_args);
 
     let now = std::time::Instant::now();
