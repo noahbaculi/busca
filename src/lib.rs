@@ -134,31 +134,37 @@ impl fmt::Display for FileMatches {
 pub fn run_search(
     ref_file_path: &PathBuf,
     search_path: &PathBuf,
+    extensions: &Vec<String>,
 ) -> Result<FileMatches, Box<dyn Error>> {
     let mut path_to_perc_shared = FileMatches(Vec::new());
 
     let ref_lines = fs::read_to_string(ref_file_path).unwrap();
 
-    let test = WalkDir::new(search_path.clone().into_os_string().into_string().unwrap())
-        .into_iter()
-        .count();
+    let search_root = search_path.clone().into_os_string().into_string().unwrap();
+
+    let test = WalkDir::new(&search_root).into_iter().count();
 
     dbg!(test);
 
     // Walk through search path
-    for dir_entry_result in
-        WalkDir::new(search_path.clone().into_os_string().into_string().unwrap())
-    {
-        let path_in_dir = dir_entry_result?.into_path();
+    let walkdir = WalkDir::new(&search_root)
+        .into_iter()
+        .filter_map(|e| e.ok());
+
+    for dir_entry_result in walkdir {
+        let path_in_dir = dir_entry_result.into_path();
 
         // Skip paths that are not files
         if !path_in_dir.is_file() {
             continue;
         }
 
-        let extension = path_in_dir.extension().unwrap_or(OsStr::new(""));
+        let extension = path_in_dir
+            .extension()
+            .unwrap_or(OsStr::new(""))
+            .to_os_string();
 
-        if !(extension == "py") {
+        if !(extensions.contains(&extension.into_string().unwrap())) {
             continue;
         }
         // dbg!(&path_in_dir);

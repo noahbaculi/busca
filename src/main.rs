@@ -19,6 +19,11 @@ struct InputArgs {
     #[arg(short, long)]
     search_path: Option<PathBuf>,
 
+    /// File extensions to include in the search. ex: `-e py -e json`. Defaults to all files with
+    /// valid UTF-8 contents
+    #[arg(short, long)]
+    ext: Vec<String>,
+
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
     count: u8,
@@ -28,6 +33,7 @@ struct InputArgs {
 struct Args {
     ref_file_path: PathBuf,
     search_path: PathBuf,
+    extensions: Vec<String>,
     count: u8,
 }
 
@@ -60,6 +66,7 @@ fn validate_args(input_args: InputArgs) -> Args {
     Args {
         ref_file_path: input_args.ref_file_path,
         search_path,
+        extensions: input_args.ext,
         count,
     }
 }
@@ -78,17 +85,18 @@ impl fmt::Display for Line {
 fn main() {
     let input_args = InputArgs::parse();
 
+    dbg!(&input_args);
+
     let args = validate_args(input_args);
 
     let now = std::time::Instant::now();
-    let mut search_results = busca::run_search(&args.ref_file_path, &args.search_path).unwrap();
-    println!("* COmpleted search in {} sec", now.elapsed().as_secs());
+    let mut search_results =
+        busca::run_search(&args.ref_file_path, &args.search_path, &args.extensions).unwrap();
+    println!("* Completed search in {} sec", now.elapsed().as_secs());
 
     search_results.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
 
     search_results.truncate(args.count.into());
-
-    // println!("{}", &search_results);
 
     let file_matches = &search_results.to_string();
     let mut grid_options: Vec<_> = file_matches.split('\n').collect();
