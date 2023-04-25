@@ -107,7 +107,7 @@ fn process_comp_file(
     dir_entry_result: Result<walkdir::DirEntry, walkdir::Error>,
     args: &Args,
     progress_bar: &ProgressBar,
-    ref_lines: &String,
+    ref_lines: &str,
 ) -> Option<FileMatch> {
     progress_bar.inc(1);
 
@@ -158,7 +158,7 @@ fn process_comp_file(
         },
     };
 
-    let num_comp_lines = comp_lines.clone().lines().count();
+    let num_comp_lines = comp_lines.lines().count();
 
     if (num_comp_lines > args.max_lines as usize) | (num_comp_lines == 0) {
         if args.verbose {
@@ -167,7 +167,7 @@ fn process_comp_file(
         return None;
     }
 
-    let perc_shared = busca::get_perc_shared_lines(&ref_lines, &comp_lines);
+    let perc_shared = busca::get_perc_shared_lines(ref_lines, &comp_lines);
     // path_to_perc_shared.push(FileMatch {
     //     path: path_in_dir.clone(),
     //     perc_shared,
@@ -175,11 +175,11 @@ fn process_comp_file(
 
     // Print new line after the file path print if file was compared.
     if args.verbose {
-        println!("");
+        println!();
     }
 
     Some(FileMatch {
-        path: path_in_dir.clone(),
+        path: path_in_dir,
         perc_shared,
     })
 }
