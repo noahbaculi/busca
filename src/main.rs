@@ -104,10 +104,8 @@ mod test_validate_args {
 
     fn get_valid_args() -> Args {
         Args {
-            ref_file_path: PathBuf::from(
-                r"sample-comprehensive/projects/Speech_to_text/speech_to_text.py",
-            ),
-            search_path: PathBuf::from(r"sample-comprehensive"),
+            ref_file_path: PathBuf::from(r"sample_dir_hello_world/file_2.py"),
+            search_path: PathBuf::from(r"sample_dir_hello_world"),
             extensions: Some(vec!["py".to_string(), "json".to_string()]),
             max_lines: 5000,
             count: 8,
