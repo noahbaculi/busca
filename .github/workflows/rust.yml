@@ -31,15 +31,16 @@ jobs:
           git reset --hard e0cfd4b0fe5e0bb4d443daba594e83332d5fb720
           rm -r .github
           cd -
+      - run: cargo test
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: 1.69.0
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      # - uses: actions-rs/toolchain@v1
+      #   with:
+      #     profile: minimal
+      #     toolchain: 1.69.0
+      #     override: true
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: test
 
   ubuntu-clippy:
     name: Ubuntu Clippy
