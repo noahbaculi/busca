@@ -1,22 +1,27 @@
 use busca::{FileMatch, FileMatches};
+// use clap::Arg;
 use clap::Parser;
 use console::{style, Style};
 use indicatif::ProgressBar;
-use indicatif::ProgressState;
+// use indicatif::ProgressState;
 use indicatif::ProgressStyle;
 use inquire::InquireError;
 use inquire::Select;
+// use pariter::IteratorExt::*;
+// use rayon::iter::ParallelBridge;
+// use rayon::prelude::*;
 use similar::{ChangeTag, TextDiff};
 use std::env;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
-use std::fmt::Write;
+// use std::fmt::Write;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::process;
 use std::process::exit;
+// use std::sync::mpsc::channel;
 use walkdir::WalkDir;
 
 /// Simple utility to find the closest matches to a reference file in a
@@ -98,9 +103,88 @@ fn validate_args(input_args: InputArgs) -> Args {
     }
 }
 
-fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
-    let mut path_to_perc_shared = FileMatches(Vec::new());
+fn process_comp_file(
+    dir_entry_result: Result<walkdir::DirEntry, walkdir::Error>,
+    args: &Args,
+    progress_bar: &ProgressBar,
+    ref_lines: &String,
+) -> Option<FileMatch> {
+    progress_bar.inc(1);
 
+    if dir_entry_result.is_err() {
+        if args.verbose {
+            println!(
+                "{} | skipped since file cannot be read.",
+                dir_entry_result.unwrap().into_path().display()
+            );
+        }
+        return None;
+    }
+
+    let path_in_dir = dir_entry_result.unwrap().into_path();
+    if args.verbose {
+        print!("{}", &path_in_dir.display());
+    }
+
+    // Skip paths that are not files
+    if !path_in_dir.is_file() {
+        if args.verbose {
+            println!(" | skipped since it is not a file.");
+        }
+        return None;
+    }
+
+    // Skip paths that do not match the extensions
+    let extension = path_in_dir
+        .extension()
+        .unwrap_or(OsStr::new(""))
+        .to_os_string()
+        .into_string()
+        .unwrap_or("".to_string());
+
+    if (args.extensions.is_some()) && !(args.extensions.clone().unwrap().contains(&extension)) {
+        if args.verbose {
+            println!(" | skipped since it does not match the extension filter.");
+        }
+        return None;
+    }
+
+    let comp_reader = fs::read_to_string(&path_in_dir);
+    let comp_lines = match comp_reader {
+        Ok(lines) => lines,
+        Err(error) => match error.kind() {
+            ErrorKind::InvalidData => return None,
+            other_error => panic!("{:?}", other_error),
+        },
+    };
+
+    let num_comp_lines = comp_lines.clone().lines().count();
+
+    if (num_comp_lines > args.max_lines as usize) | (num_comp_lines == 0) {
+        if args.verbose {
+            println!(" | skipped since it exceeds the maximum line limit.");
+        }
+        return None;
+    }
+
+    let perc_shared = busca::get_perc_shared_lines(&ref_lines, &comp_lines);
+    // path_to_perc_shared.push(FileMatch {
+    //     path: path_in_dir.clone(),
+    //     perc_shared,
+    // });
+
+    // Print new line after the file path print if file was compared.
+    if args.verbose {
+        println!("");
+    }
+
+    Some(FileMatch {
+        path: path_in_dir.clone(),
+        perc_shared,
+    })
+}
+
+fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
     let ref_lines = fs::read_to_string(&args.ref_file_path).unwrap();
 
     let search_root = args
@@ -119,79 +203,20 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
         )
         .unwrap()
-        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| {
-            write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
-        })
         .progress_chars("#>-"),
     );
 
     // Walk through search path
-    for dir_entry_result in WalkDir::new(&search_root) {
-        progress_bar.inc(1);
-        if dir_entry_result.is_err() {
-            continue;
-        }
-        let path_in_dir = dir_entry_result.unwrap().into_path();
+    let file_match_vec: Vec<FileMatch> = WalkDir::new(&search_root)
+        .into_iter()
+        .filter_map(|dir_entry_result| {
+            process_comp_file(dir_entry_result, args, &progress_bar, &ref_lines)
+        })
+        .collect();
 
-        if args.verbose {
-            print!("{}", &path_in_dir.display());
-        }
-
-        // Skip paths that are not files
-        if !path_in_dir.is_file() {
-            if args.verbose {
-                println!(" | skipped since it is not a file.");
-            }
-            continue;
-        }
-
-        // Skip paths that do not match the extensions
-        let extension = path_in_dir
-            .extension()
-            .unwrap_or(OsStr::new(""))
-            .to_os_string()
-            .into_string()
-            .unwrap_or("".to_string());
-
-        if (args.extensions.is_some()) && !(args.extensions.clone().unwrap().contains(&extension)) {
-            if args.verbose {
-                println!(" | skipped since it does not match the extension filter.");
-            }
-            continue;
-        }
-
-        let comp_reader = fs::read_to_string(&path_in_dir);
-        let comp_lines = match comp_reader {
-            Ok(lines) => lines,
-            Err(error) => match error.kind() {
-                ErrorKind::InvalidData => continue,
-                other_error => panic!("{:?}", other_error),
-            },
-        };
-
-        let num_comp_lines = comp_lines.clone().lines().count();
-
-        if (num_comp_lines > args.max_lines as usize) | (num_comp_lines == 0) {
-            if args.verbose {
-                println!(" | skipped since it exceeds the maximum line limit.");
-            }
-            continue;
-        }
-
-        let perc_shared = busca::get_perc_shared_lines(&ref_lines, &comp_lines);
-        path_to_perc_shared.push(FileMatch {
-            path: path_in_dir.clone(),
-            perc_shared,
-        });
-
-        // Print new line after the file path print if file was compared.
-        if args.verbose {
-            println!("");
-        }
-    }
     progress_bar.finish();
 
-    Ok(path_to_perc_shared)
+    Ok(busca::FileMatches(file_match_vec))
 }
 
 struct Line(Option<usize>);
