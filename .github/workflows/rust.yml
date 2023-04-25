@@ -6,61 +6,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  ubuntu-build-clippy:
-    name: Ubuntu Build and Clippy
-    runs-on: ubuntu-latest
+  build-clippy:
+    name: Build and Clippy
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
       - run: cargo build
       - run: cargo clippy -- -D warnings
 
-  ubuntu-test:
-    name: Ubuntu Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Download testing comprehensive repo
-        run: |
-          git clone https://github.com/Python-World/python-mini-projects.git sample-comprehensive
-          cd sample-comprehensive
-          git reset --hard e0cfd4b0fe5e0bb4d443daba594e83332d5fb720
-          rm -r .github
-          cd -
-      - run: cargo test
-
-  macos-build-clippy:
-    name: MacOS Build and Clippy
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      - run: cargo build
-      - run: cargo clippy -- -D warnings
-
-  macos-test:
-    name: MacOS Test
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Download testing comprehensive repo
-        run: |
-          git clone https://github.com/Python-World/python-mini-projects.git sample-comprehensive
-          cd sample-comprehensive
-          git reset --hard e0cfd4b0fe5e0bb4d443daba594e83332d5fb720
-          rm -r .github
-          cd -
-      - run: cargo test
-
-  windows-build-clippy:
-    name: Windows Build and Clippy
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
-      - run: cargo build
-      - run: cargo clippy -- -D warnings
-
-  windows-test:
-    name: Windows Test
-    runs-on: windows-latest
+  test:
+    name: Test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
       - name: Download testing comprehensive repo
