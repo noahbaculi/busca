@@ -98,22 +98,54 @@ impl FileMatches {
             .map(|x| x.path.display().to_string().chars().count())
             .max()
     }
-}
 
-impl fmt::Display for FileMatches {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    /// Returns a formatted string with one file match per line with path
+    /// string, visualization, and match percentage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let file_matches = busca::FileMatches(vec![
+    ///     busca::FileMatch {
+    ///         path: std::path::PathBuf::from(r"/sample-comprehensive/projects/Geocoding/geocoding.py"),
+    ///         perc_shared: 0.9846,
+    ///     },
+    ///     busca::FileMatch {
+    ///         path: std::path::PathBuf::from(
+    ///             r"sample-comprehensive\\projects\\Bouncing_ball_simulator\\ball_bounce.py",
+    ///         ),
+    ///         perc_shared: 0.3481,
+    ///     },
+    ///     busca::FileMatch {
+    ///         path: std::path::PathBuf::from(r"/sample-comprehensive/projects/Geocoding/geocoding.py"),
+    ///         perc_shared: 0.0521,
+    ///     },
+    /// ]);
+
+    /// let expected_output = "\
+    /// /sample-comprehensive/projects/Geocoding/geocoding.py                    ++++++++++  98.5%
+    /// sample-comprehensive\\\\projects\\\\Bouncing_ball_simulator\\\\ball_bounce.py  +++         34.8%
+    /// /sample-comprehensive/projects/Geocoding/geocoding.py                    +            5.2%";
+
+    /// assert_eq!(file_matches.get_formatted_string(), expected_output);
+    /// ```
+    ///
+    pub fn get_formatted_string(&self) -> String {
         let mut grid = Grid::new(GridOptions {
             filling: Filling::Spaces(2),
             direction: Direction::LeftToRight,
         });
 
         for path_and_perc in self.iter() {
+            // Add first column with the file path
             grid.add(Cell::from(path_and_perc.path.display().to_string()));
 
+            // Add second column with the visual indicator of the match perc
             let visual_indicator = "+".repeat((path_and_perc.perc_shared * 10.0).round() as usize);
             let vis_cell = Cell::from(visual_indicator);
             grid.add(vis_cell);
 
+            // Add third column with the numerical match perc
             let perc_str = format!("{:.1}%", (path_and_perc.perc_shared * 100.0));
             let mut perc_cell = Cell::from(perc_str);
             perc_cell.alignment = Alignment::Right;
@@ -122,7 +154,30 @@ impl fmt::Display for FileMatches {
 
         let disp = grid.fit_into_columns(3);
 
-        let grid_str = disp.to_string();
+        let mut display_string = disp.to_string();
+
+        // Remove trailing new line
+        if display_string.ends_with('\n') {
+            display_string.pop();
+        }
+
+        display_string
+    }
+}
+
+impl fmt::Display for FileMatches {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let grid_str = self.get_formatted_string();
         write!(f, "{}", grid_str)
     }
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use std::{path::PathBuf, str::FromStr};
+
+//     #[test]
+//     fn test_drafter() {
+//         // Space to draft test with syntax highlighting and rust-analyzer
+//     }
+// }
