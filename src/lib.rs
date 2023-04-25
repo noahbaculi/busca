@@ -69,7 +69,7 @@ pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
 
     num_shared_lines as f32 / num_ref_lines as f32
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileMatch {
     pub path: PathBuf,
     pub perc_shared: f32,

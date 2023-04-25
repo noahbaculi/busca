@@ -2,7 +2,7 @@ use busca::{FileMatch, FileMatches};
 // use clap::Arg;
 use clap::Parser;
 use console::{style, Style};
-use indicatif::ProgressBar;
+use indicatif::ProgressIterator;
 // use indicatif::ProgressState;
 use indicatif::ProgressStyle;
 use inquire::InquireError;
@@ -198,13 +198,11 @@ mod test_validate_args {
     }
 }
 
-fn process_comp_file(
+fn compare_file(
     dir_entry_result: Result<walkdir::DirEntry, walkdir::Error>,
     args: &Args,
-    progress_bar: &ProgressBar,
     ref_lines: &str,
 ) -> Option<FileMatch> {
-    progress_bar.inc(1);
 
     if dir_entry_result.is_err() {
         if args.verbose {
@@ -274,6 +272,127 @@ fn process_comp_file(
         perc_shared,
     })
 }
+#[cfg(test)]
+mod test_compare_file {
+    use super::*;
+
+    fn get_valid_args() -> Args {
+        Args {
+            ref_file_path: PathBuf::from(r"sample_dir_hello_world/file_2.py"),
+            search_path: PathBuf::from(r"sample_dir_hello_world"),
+            extensions: None,
+            max_lines: 5000,
+            count: 8,
+            verbose: true,
+        }
+    }
+
+    #[test]
+    fn skip_directory() {
+        let valid_args = get_valid_args();
+
+        let ref_lines = fs::read_to_string(PathBuf::from(
+            r"sample_dir_hello_world/nested_dir/sample_python_file_3.py",
+        ))
+        .unwrap();
+
+        let dir_entry_result = WalkDir::new("sample_dir_hello_world")
+            .into_iter()
+            .next()
+            .unwrap();
+
+        let file_comparison =
+            compare_file(dir_entry_result, &valid_args, &ref_lines);
+
+        assert_eq!(file_comparison, None);
+    }
+
+    #[test]
+    fn same_file_comparison() {
+        let valid_args = get_valid_args();
+
+        let file_path_str = "sample_dir_hello_world/nested_dir/sample_python_file_3.py";
+
+        let ref_lines = fs::read_to_string(PathBuf::from(file_path_str)).unwrap();
+
+        let dir_entry_result = WalkDir::new(file_path_str).into_iter().next().unwrap();
+
+        let file_comparison =
+            compare_file(dir_entry_result, &valid_args, &ref_lines);
+
+        assert_eq!(
+            file_comparison,
+            Some(FileMatch {
+                path: PathBuf::from(file_path_str),
+                perc_shared: 1.0
+            })
+        );
+    }
+
+    #[test]
+    fn normal_file_comp() {
+        let valid_args = get_valid_args();
+
+        let ref_lines = fs::read_to_string(PathBuf::from(
+            r"sample_dir_hello_world/nested_dir/sample_python_file_3.py",
+        ))
+        .unwrap();
+
+        let comp_path_str = "sample_dir_hello_world/file_1.py";
+
+        let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
+
+        let file_comparison =
+            compare_file(dir_entry_result, &valid_args, &ref_lines);
+
+        assert_eq!(
+            file_comparison,
+            Some(FileMatch {
+                path: PathBuf::from(comp_path_str),
+                perc_shared: 0.6
+            })
+        );
+    }
+
+    #[test]
+    fn include_extensions() {
+        // TODO
+        let mut valid_args = get_valid_args();
+        valid_args.extensions = Some(vec!["json".to_string()]);
+
+        let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
+
+        let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
+
+        let file_comparison =
+            compare_file(dir_entry_result, &valid_args, "");
+
+        assert_eq!(
+            file_comparison,
+            Some(FileMatch {
+                path: PathBuf::from(comp_path_str),
+                perc_shared: 0.0
+            })
+        );
+    }
+    #[test]
+    fn exclude_extensions() {
+        let mut valid_args = get_valid_args();
+        valid_args.extensions = Some(vec!["py".to_string()]);
+
+        let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
+
+        let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
+
+        let file_comparison =
+            compare_file(dir_entry_result, &valid_args, "");
+
+        assert_eq!(
+            file_comparison,
+            None
+        );
+    }
+}
 
 fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
     let ref_lines = fs::read_to_string(&args.ref_file_path).unwrap();
@@ -285,27 +404,31 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
         .into_string()
         .unwrap();
 
-    let num_files = WalkDir::new(&search_root).into_iter().count();
-
-    // Create progress bar
-    let progress_bar = ProgressBar::new(num_files.try_into().unwrap());
-    progress_bar.set_style(
+    // Create progress bar style
+    let progress_bar_style = 
         ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
         )
         .unwrap()
-        .progress_chars("#>-"),
-    );
+        .progress_chars("#>-");
+
 
     // Walk through search path
-    let file_match_vec: Vec<FileMatch> = WalkDir::new(&search_root)
+    let mut file_match_vec: Vec<FileMatch> = WalkDir::new(&search_root)
         .into_iter()
+        .collect::<Vec<_>>()
+        .into_iter()
+        .progress_with_style(progress_bar_style)
         .filter_map(|dir_entry_result| {
-            process_comp_file(dir_entry_result, args, &progress_bar, &ref_lines)
+            compare_file(dir_entry_result, args, &ref_lines)
         })
         .collect();
 
-    progress_bar.finish();
+    // Sort by percent match
+    file_match_vec.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
+
+    // Keep the top matches
+    file_match_vec.truncate(args.count.into());
 
     Ok(busca::FileMatches(file_match_vec))
 }
@@ -334,11 +457,7 @@ fn main() {
         Err(err) => graceful_panic(err),
     };
 
-    let mut search_results = run_search(&args).unwrap();
-
-    search_results.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
-
-    search_results.truncate(args.count.into());
+    let search_results = run_search(&args).unwrap();
 
     let file_matches = &search_results.to_string();
     let mut grid_options: Vec<_> = file_matches.split('\n').collect();
