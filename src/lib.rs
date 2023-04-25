@@ -93,12 +93,6 @@ impl std::ops::DerefMut for FileMatches {
 }
 
 impl FileMatches {
-    pub fn max_path_width(&self) -> Option<usize> {
-        self.iter()
-            .map(|x| x.path.display().to_string().chars().count())
-            .max()
-    }
-
     /// Returns a formatted string with one file match per line with path
     /// string, visualization, and match percentage.
     ///

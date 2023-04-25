@@ -57,7 +57,7 @@ struct InputArgs {
     verbose: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Args {
     ref_file_path: PathBuf,
     search_path: PathBuf,
@@ -67,12 +67,13 @@ struct Args {
     verbose: bool,
 }
 
-fn validate_args(input_args: InputArgs) -> Args {
+/// Validates input args.
+fn validate_args(input_args: InputArgs) -> Result<Args, String> {
     if !input_args.ref_file_path.is_file() {
-        panic!(
-            "The reference file path '{}' could not be found",
+        return Err(format!(
+            "The reference file path '{}' could not be found.",
             input_args.ref_file_path.display()
-        );
+        ));
     }
 
     // Assign to CWD if the arg is not given
@@ -82,24 +83,120 @@ fn validate_args(input_args: InputArgs) -> Args {
         .unwrap_or(env::current_dir().unwrap());
 
     if !search_path.is_file() & !search_path.is_dir() {
-        panic!(
-            "The search path '{}' could not be found",
+        return Err(format!(
+            "The search path '{}' could not be found.",
             search_path.display()
-        );
+        ));
     }
 
-    let mut count = input_args.count;
-    if (count == 0) | (count > 200) {
-        count = 10
-    }
-
-    Args {
+    Ok(Args {
         ref_file_path: input_args.ref_file_path,
         search_path,
         extensions: input_args.ext,
         max_lines: input_args.max_lines,
-        count,
+        count: input_args.count,
         verbose: input_args.verbose,
+    })
+}
+#[cfg(test)]
+mod test_validate_args {
+    use super::*;
+
+    fn get_valid_args() -> Args {
+        Args {
+            ref_file_path: PathBuf::from(
+                r"sample-comprehensive/projects/Speech_to_text/speech_to_text.py",
+            ),
+            search_path: PathBuf::from(r"sample-comprehensive"),
+            extensions: Some(vec!["py".to_string(), "json".to_string()]),
+            max_lines: 5000,
+            count: 8,
+            verbose: true,
+        }
+    }
+
+    #[test]
+    fn valid_args() {
+        let valid_args = get_valid_args();
+
+        // No changes are made to parameters
+        let input_args = InputArgs {
+            ref_file_path: valid_args.ref_file_path.clone(),
+            search_path: Some(valid_args.search_path.clone()),
+            ext: valid_args.extensions.clone(),
+            max_lines: valid_args.max_lines,
+            count: valid_args.count,
+            verbose: valid_args.verbose,
+        };
+        assert_eq!(
+            validate_args(input_args),
+            Ok(Args {
+                ref_file_path: valid_args.ref_file_path.clone(),
+                search_path: valid_args.search_path.clone(),
+                extensions: valid_args.extensions.clone(),
+                max_lines: valid_args.max_lines,
+                count: valid_args.count,
+                verbose: valid_args.verbose,
+            })
+        );
+    }
+
+    #[test]
+    fn override_args() {
+        let valid_args = get_valid_args();
+        let input_args = InputArgs {
+            ref_file_path: valid_args.ref_file_path.clone(),
+            search_path: None,
+            ext: valid_args.extensions.clone(),
+            max_lines: valid_args.max_lines,
+            count: valid_args.count,
+            verbose: valid_args.verbose,
+        };
+        assert_eq!(
+            validate_args(input_args),
+            Ok(Args {
+                ref_file_path: valid_args.ref_file_path.clone(),
+                search_path: env::current_dir().unwrap(),
+                extensions: valid_args.extensions.clone(),
+                max_lines: valid_args.max_lines,
+                count: valid_args.count,
+                verbose: valid_args.verbose,
+            })
+        );
+    }
+
+    #[test]
+    fn nonexistent_reference_path() {
+        let valid_args = get_valid_args();
+        let input_args_wrong_ref_file = InputArgs {
+            ref_file_path: PathBuf::from(r"nonexistent_path"),
+            search_path: Some(valid_args.search_path.clone()),
+            ext: valid_args.extensions.clone(),
+            max_lines: valid_args.max_lines,
+            count: valid_args.count,
+            verbose: valid_args.verbose,
+        };
+        assert_eq!(
+            validate_args(input_args_wrong_ref_file),
+            Err("The reference file path 'nonexistent_path' could not be found.".to_string())
+        );
+    }
+
+    #[test]
+    fn nonexistent_search_path() {
+        let valid_args = get_valid_args();
+        let input_args_wrong_ref_file = InputArgs {
+            ref_file_path: valid_args.ref_file_path.clone(),
+            search_path: Some(PathBuf::from(r"nonexistent_path")),
+            ext: valid_args.extensions.clone(),
+            max_lines: valid_args.max_lines,
+            count: valid_args.count,
+            verbose: valid_args.verbose,
+        };
+        assert_eq!(
+            validate_args(input_args_wrong_ref_file),
+            Err("The search path 'nonexistent_path' could not be found.".to_string())
+        );
     }
 }
 
@@ -168,10 +265,6 @@ fn process_comp_file(
     }
 
     let perc_shared = busca::get_perc_shared_lines(ref_lines, &comp_lines);
-    // path_to_perc_shared.push(FileMatch {
-    //     path: path_in_dir.clone(),
-    //     perc_shared,
-    // });
 
     // Print new line after the file path print if file was compared.
     if args.verbose {
@@ -230,15 +323,18 @@ impl fmt::Display for Line {
     }
 }
 
-fn graceful_panic(error: impl Error) -> ! {
-    eprintln!("{}", &error);
+fn graceful_panic(error_str: String) -> ! {
+    eprintln!("{}", error_str);
     exit(1);
 }
 
 fn main() {
     let input_args = InputArgs::parse();
 
-    let args = validate_args(input_args);
+    let args = match validate_args(input_args) {
+        Ok(args) => args,
+        Err(err) => graceful_panic(err),
+    };
 
     let mut search_results = run_search(&args).unwrap();
 
@@ -260,7 +356,7 @@ fn main() {
     let ans = match Select::new("Select a file to compare:", grid_options).raw_prompt() {
         Ok(answer) => answer,
         Err(InquireError::OperationCanceled) => exit(0),
-        Err(err) => graceful_panic(err),
+        Err(err) => graceful_panic(err.to_string()),
     };
 
     let selected_search = &search_results[ans.index];
