@@ -46,6 +46,10 @@ struct InputArgs {
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
     count: u8,
+
+    /// Print all files being considered for comparison
+    #[arg(long)]
+    verbose: bool,
 }
 
 #[derive(Debug)]
@@ -55,6 +59,7 @@ struct Args {
     extensions: Option<Vec<String>>,
     max_lines: u32,
     count: u8,
+    verbose: bool,
 }
 
 fn validate_args(input_args: InputArgs) -> Args {
@@ -89,20 +94,21 @@ fn validate_args(input_args: InputArgs) -> Args {
         extensions: input_args.ext,
         max_lines: input_args.max_lines,
         count,
+        verbose: input_args.verbose,
     }
 }
 
-pub fn run_search(
-    ref_file_path: &PathBuf,
-    search_path: &PathBuf,
-    extensions: &Option<Vec<String>>,
-    max_lines: &u32,
-) -> Result<FileMatches, Box<dyn Error>> {
+fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
     let mut path_to_perc_shared = FileMatches(Vec::new());
 
-    let ref_lines = fs::read_to_string(ref_file_path).unwrap();
+    let ref_lines = fs::read_to_string(&args.ref_file_path).unwrap();
 
-    let search_root = search_path.clone().into_os_string().into_string().unwrap();
+    let search_root = args
+        .search_path
+        .clone()
+        .into_os_string()
+        .into_string()
+        .unwrap();
 
     let num_files = WalkDir::new(&search_root).into_iter().count();
 
@@ -125,14 +131,21 @@ pub fn run_search(
         if dir_entry_result.is_err() {
             continue;
         }
-
         let path_in_dir = dir_entry_result.unwrap().into_path();
+
+        if args.verbose {
+            print!("{}", &path_in_dir.display());
+        }
 
         // Skip paths that are not files
         if !path_in_dir.is_file() {
+            if args.verbose {
+                println!(" | skipped since it is not a file.");
+            }
             continue;
         }
 
+        // Skip paths that do not match the extensions
         let extension = path_in_dir
             .extension()
             .unwrap_or(OsStr::new(""))
@@ -140,7 +153,10 @@ pub fn run_search(
             .into_string()
             .unwrap_or("".to_string());
 
-        if (extensions.is_some()) && !(extensions.clone().unwrap().contains(&extension)) {
+        if (args.extensions.is_some()) && !(args.extensions.clone().unwrap().contains(&extension)) {
+            if args.verbose {
+                println!(" | skipped since it does not match the extension filter.");
+            }
             continue;
         }
 
@@ -155,7 +171,10 @@ pub fn run_search(
 
         let num_comp_lines = comp_lines.clone().lines().count();
 
-        if (num_comp_lines > *max_lines as usize) | (num_comp_lines == 0) {
+        if (num_comp_lines > args.max_lines as usize) | (num_comp_lines == 0) {
+            if args.verbose {
+                println!(" | skipped since it exceeds the maximum line limit.");
+            }
             continue;
         }
 
@@ -164,6 +183,11 @@ pub fn run_search(
             path: path_in_dir.clone(),
             perc_shared,
         });
+
+        // Print new line after the file path print if file was compared.
+        if args.verbose {
+            println!("");
+        }
     }
     progress_bar.finish();
 
@@ -191,13 +215,7 @@ fn main() {
 
     let args = validate_args(input_args);
 
-    let mut search_results = run_search(
-        &args.ref_file_path,
-        &args.search_path,
-        &args.extensions,
-        &args.max_lines,
-    )
-    .unwrap();
+    let mut search_results = run_search(&args).unwrap();
 
     search_results.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
 
