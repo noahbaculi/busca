@@ -102,20 +102,21 @@ fn validate_args(input_args: InputArgs) -> Result<Args, String> {
 mod test_validate_args {
     use super::*;
 
+    fn get_valid_args() -> Args {
+        Args {
+            ref_file_path: PathBuf::from(
+                r"sample-comprehensive/projects/Speech_to_text/speech_to_text.py",
+            ),
+            search_path: PathBuf::from(r"sample-comprehensive"),
+            extensions: Some(vec!["py".to_string(), "json".to_string()]),
+            max_lines: 5000,
+            count: 8,
+            verbose: true,
+        }
+    }
+
     #[test]
     fn valid_args() {
-        fn get_valid_args() -> Args {
-            Args {
-                ref_file_path: PathBuf::from(
-                    r"sample-comprehensive/projects/Speech_to_text/speech_to_text.py",
-                ),
-                search_path: PathBuf::from(r"sample-comprehensive"),
-                extensions: Some(vec!["py".to_string(), "json".to_string()]),
-                max_lines: 5000,
-                count: 8,
-                verbose: true,
-            }
-        }
         let valid_args = get_valid_args();
 
         // No changes are made to parameters
@@ -140,99 +141,63 @@ mod test_validate_args {
         );
     }
 
-    // #[test]
-    // fn override_args() {
-    //     fn get_valid_args() -> Args {
-    //         Args {
-    //             ref_file_path: PathBuf::from(
-    //                 r"sample-comprehensive/projects/Speech_to_text/speech_to_text.py",
-    //             ),
-    //             search_path: PathBuf::from(r"sample-comprehensive"),
-    //             extensions: Some(vec!["py".to_string(), "json".to_string()]),
-    //             max_lines: 5000,
-    //             count: 8,
-    //             verbose: true,
-    //         }
-    //     }
-    //     let valid_args = get_valid_args();
-    //     let input_args = InputArgs {
-    //         ref_file_path: valid_args.ref_file_path.clone(),
-    //         search_path: None,
-    //         ext: valid_args.extensions.clone(),
-    //         max_lines: valid_args.max_lines,
-    //         count: valid_args.count,
-    //         verbose: valid_args.verbose,
-    //     };
-    //     assert_eq!(
-    //         validate_args(input_args),
-    //         Ok(Args {
-    //             ref_file_path: valid_args.ref_file_path.clone(),
-    //             search_path: env::current_dir().unwrap(),
-    //             extensions: valid_args.extensions.clone(),
-    //             max_lines: valid_args.max_lines,
-    //             count: valid_args.count,
-    //             verbose: valid_args.verbose,
-    //         })
-    //     );
-    // }
+    #[test]
+    fn override_args() {
+        let valid_args = get_valid_args();
+        let input_args = InputArgs {
+            ref_file_path: valid_args.ref_file_path.clone(),
+            search_path: None,
+            ext: valid_args.extensions.clone(),
+            max_lines: valid_args.max_lines,
+            count: valid_args.count,
+            verbose: valid_args.verbose,
+        };
+        assert_eq!(
+            validate_args(input_args),
+            Ok(Args {
+                ref_file_path: valid_args.ref_file_path.clone(),
+                search_path: env::current_dir().unwrap(),
+                extensions: valid_args.extensions.clone(),
+                max_lines: valid_args.max_lines,
+                count: valid_args.count,
+                verbose: valid_args.verbose,
+            })
+        );
+    }
 
-    // #[test]
-    // fn nonexistent_reference_path() {
-    //     fn get_valid_args() -> Args {
-    //         Args {
-    //             ref_file_path: PathBuf::from(
-    //                 r"sample-comprehensive/projects/Speech_to_text/speech_to_text.py",
-    //             ),
-    //             search_path: PathBuf::from(r"sample-comprehensive"),
-    //             extensions: Some(vec!["py".to_string(), "json".to_string()]),
-    //             max_lines: 5000,
-    //             count: 8,
-    //             verbose: true,
-    //         }
-    //     }
-    //     let valid_args = get_valid_args();
-    //     let input_args_wrong_ref_file = InputArgs {
-    //         ref_file_path: PathBuf::from(r"nonexistent_path"),
-    //         search_path: Some(valid_args.search_path.clone()),
-    //         ext: valid_args.extensions.clone(),
-    //         max_lines: valid_args.max_lines,
-    //         count: valid_args.count,
-    //         verbose: valid_args.verbose,
-    //     };
-    //     assert_eq!(
-    //         validate_args(input_args_wrong_ref_file),
-    //         Err("The reference file path 'nonexistent_path' could not be found.".to_string())
-    //     );
-    // }
+    #[test]
+    fn nonexistent_reference_path() {
+        let valid_args = get_valid_args();
+        let input_args_wrong_ref_file = InputArgs {
+            ref_file_path: PathBuf::from(r"nonexistent_path"),
+            search_path: Some(valid_args.search_path.clone()),
+            ext: valid_args.extensions.clone(),
+            max_lines: valid_args.max_lines,
+            count: valid_args.count,
+            verbose: valid_args.verbose,
+        };
+        assert_eq!(
+            validate_args(input_args_wrong_ref_file),
+            Err("The reference file path 'nonexistent_path' could not be found.".to_string())
+        );
+    }
 
-    // #[test]
-    // fn nonexistent_search_path() {
-    //     fn get_valid_args() -> Args {
-    //         Args {
-    //             ref_file_path: PathBuf::from(
-    //                 r"sample-comprehensive/projects/Speech_to_text/speech_to_text.py",
-    //             ),
-    //             search_path: PathBuf::from(r"sample-comprehensive"),
-    //             extensions: Some(vec!["py".to_string(), "json".to_string()]),
-    //             max_lines: 5000,
-    //             count: 8,
-    //             verbose: true,
-    //         }
-    //     }
-    //     let valid_args = get_valid_args();
-    //     let input_args_wrong_ref_file = InputArgs {
-    //         ref_file_path: valid_args.ref_file_path.clone(),
-    //         search_path: Some(PathBuf::from(r"nonexistent_path")),
-    //         ext: valid_args.extensions.clone(),
-    //         max_lines: valid_args.max_lines,
-    //         count: valid_args.count,
-    //         verbose: valid_args.verbose,
-    //     };
-    //     assert_eq!(
-    //         validate_args(input_args_wrong_ref_file),
-    //         Err("The search path 'nonexistent_path' could not be found.".to_string())
-    //     );
-    // }
+    #[test]
+    fn nonexistent_search_path() {
+        let valid_args = get_valid_args();
+        let input_args_wrong_ref_file = InputArgs {
+            ref_file_path: valid_args.ref_file_path.clone(),
+            search_path: Some(PathBuf::from(r"nonexistent_path")),
+            ext: valid_args.extensions.clone(),
+            max_lines: valid_args.max_lines,
+            count: valid_args.count,
+            verbose: valid_args.verbose,
+        };
+        assert_eq!(
+            validate_args(input_args_wrong_ref_file),
+            Err("The search path 'nonexistent_path' could not be found.".to_string())
+        );
+    }
 }
 
 fn process_comp_file(
