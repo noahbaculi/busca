@@ -414,7 +414,7 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
 
 
     // Walk through search path
-    let mut file_match_vec: Vec<FileMatch> = WalkDir::new(&search_root)
+    let mut file_match_vec: Vec<FileMatch> = WalkDir::new(search_root)
         .into_iter()
         .collect::<Vec<_>>()
         .into_iter()
