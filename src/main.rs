@@ -1,22 +1,16 @@
 use busca::{FileMatch, FileMatches};
 use clap::Parser;
 use console::{style, Style};
-use indicatif::ParallelProgressIterator;
-use indicatif::ProgressStyle;
-use inquire::InquireError;
-use inquire::Select;
+use indicatif::{ParallelProgressIterator, ProgressStyle};
+use inquire::{InquireError, Select};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use similar::{ChangeTag, TextDiff};
 use std::env;
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
-use std::io::ErrorKind;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process;
-use std::process::exit;
 use walkdir::WalkDir;
 
 /// Simple utility to find the closest matches to a reference file in a
@@ -238,7 +232,7 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
     // Skip paths that do not match the extensions
     let extension = comp_path
         .extension()
-        .unwrap_or(OsStr::new(""))
+        .unwrap_or(std::ffi::OsStr::new(""))
         .to_os_string()
         .into_string()
         .unwrap_or("".to_owned());
@@ -254,7 +248,7 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
     let comp_lines = match comp_reader {
         Ok(lines) => lines,
         Err(error) => match error.kind() {
-            ErrorKind::InvalidData => return None,
+            std::io::ErrorKind::InvalidData => return None,
             other_error => panic!("{:?}", other_error),
         },
     };
@@ -508,7 +502,7 @@ impl fmt::Display for Line {
 
 fn graceful_panic(error_str: String) -> ! {
     eprintln!("{}", error_str);
-    exit(1);
+    std::process::exit(1);
 }
 
 fn main() {
@@ -529,12 +523,12 @@ fn main() {
 
     if grid_options.is_empty() {
         println!("No files found that match the criteria.");
-        process::exit(0);
+        std::process::exit(0);
     }
 
     let ans = match Select::new("Select a file to compare:", grid_options).raw_prompt() {
         Ok(answer) => answer,
-        Err(InquireError::OperationCanceled) => exit(0),
+        Err(InquireError::OperationCanceled) => std::process::exit(0),
         Err(err) => graceful_panic(err.to_string()),
     };
 
