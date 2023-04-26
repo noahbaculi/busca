@@ -15,7 +15,7 @@ cd -
 ## Sample run to time
 
 ```shell
-cargo run -- sample-comprehensive/projects/Billing_system/biling_system.py
+cargo run -- sample-comprehensive/projects/Billing_system/biling_system.py -s sample-comprehensive
 ```
 
 ## Run tests

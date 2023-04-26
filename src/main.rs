@@ -1,27 +1,22 @@
 use busca::{FileMatch, FileMatches};
-// use clap::Arg;
 use clap::Parser;
 use console::{style, Style};
-use indicatif::ProgressIterator;
-// use indicatif::ProgressState;
+use indicatif::ParallelProgressIterator;
 use indicatif::ProgressStyle;
 use inquire::InquireError;
 use inquire::Select;
-// use pariter::IteratorExt::*;
-// use rayon::iter::ParallelBridge;
-// use rayon::prelude::*;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use similar::{ChangeTag, TextDiff};
 use std::env;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
-// use std::fmt::Write;
 use std::fs;
 use std::io::ErrorKind;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process;
 use std::process::exit;
-// use std::sync::mpsc::channel;
 use walkdir::WalkDir;
 
 /// Simple utility to find the closest matches to a reference file in a
@@ -198,28 +193,13 @@ mod test_validate_args {
     }
 }
 
-fn compare_file(
-    dir_entry_result: Result<walkdir::DirEntry, walkdir::Error>,
-    args: &Args,
-    ref_lines: &str,
-) -> Option<FileMatch> {
-    if dir_entry_result.is_err() {
-        if args.verbose {
-            println!(
-                "{} | skipped since file cannot be read.",
-                dir_entry_result.unwrap().into_path().display()
-            );
-        }
-        return None;
-    }
-
-    let path_in_dir = dir_entry_result.unwrap().into_path();
+fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMatch> {
     if args.verbose {
-        print!("{}", &path_in_dir.display());
+        print!("{}", &comp_path.display());
     }
 
     // Skip paths that are not files
-    if !path_in_dir.is_file() {
+    if !comp_path.is_file() {
         if args.verbose {
             println!(" | skipped since it is not a file.");
         }
@@ -227,7 +207,7 @@ fn compare_file(
     }
 
     // Skip paths that do not match the extensions
-    let extension = path_in_dir
+    let extension = comp_path
         .extension()
         .unwrap_or(OsStr::new(""))
         .to_os_string()
@@ -241,7 +221,7 @@ fn compare_file(
         return None;
     }
 
-    let comp_reader = fs::read_to_string(&path_in_dir);
+    let comp_reader = fs::read_to_string(comp_path);
     let comp_lines = match comp_reader {
         Ok(lines) => lines,
         Err(error) => match error.kind() {
@@ -267,7 +247,7 @@ fn compare_file(
     }
 
     Some(FileMatch {
-        path: path_in_dir,
+        path: PathBuf::from(comp_path),
         perc_shared,
     })
 }
@@ -298,9 +278,10 @@ mod test_compare_file {
         let dir_entry_result = WalkDir::new("sample_dir_hello_world")
             .into_iter()
             .next()
+            .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result, &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
 
         assert_eq!(file_comparison, None);
     }
@@ -313,9 +294,13 @@ mod test_compare_file {
 
         let ref_lines = fs::read_to_string(PathBuf::from(file_path_str)).unwrap();
 
-        let dir_entry_result = WalkDir::new(file_path_str).into_iter().next().unwrap();
+        let dir_entry_result = WalkDir::new(file_path_str)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result, &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
 
         assert_eq!(
             file_comparison,
@@ -337,9 +322,13 @@ mod test_compare_file {
 
         let comp_path_str = "sample_dir_hello_world/file_1.py";
 
-        let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
+        let dir_entry_result = WalkDir::new(comp_path_str)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result, &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
 
         assert_eq!(
             file_comparison,
@@ -357,9 +346,13 @@ mod test_compare_file {
 
         let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
 
-        let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
+        let dir_entry_result = WalkDir::new(comp_path_str)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result, &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, "");
 
         assert_eq!(
             file_comparison,
@@ -376,9 +369,13 @@ mod test_compare_file {
 
         let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
 
-        let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
+        let dir_entry_result = WalkDir::new(comp_path_str)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result, &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, "");
 
         assert_eq!(file_comparison, None);
     }
@@ -401,13 +398,18 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
         .unwrap()
         .progress_chars("#>-");
 
+    let now = std::time::Instant::now();
+
     // Walk through search path
     let mut file_match_vec: Vec<FileMatch> = WalkDir::new(search_root)
         .into_iter()
         .collect::<Vec<_>>()
-        .into_iter()
+        .par_iter()
         .progress_with_style(progress_bar_style)
-        .filter_map(|dir_entry_result| compare_file(dir_entry_result, args, &ref_lines))
+        .filter_map(|dir_entry_result| match dir_entry_result {
+            Ok(dir_entry) => compare_file(dir_entry.path(), args, &ref_lines),
+            Err(_) => None,
+        })
         .collect();
 
     // Sort by percent match
@@ -415,6 +417,8 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
 
     // Keep the top matches
     file_match_vec.truncate(args.count.into());
+
+    println!("Elapsed: {:.2?}", now.elapsed());
 
     Ok(busca::FileMatches(file_match_vec))
 }
