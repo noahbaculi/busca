@@ -25,7 +25,7 @@ use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 /// assert_eq!(result, 2);
 /// ```
 ///
-pub fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> i32 {
+pub fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> usize {
     let diff = TextDiff::from_lines(ref_lines, comp_lines);
 
     // let mut num_shared_lines = 0;
@@ -35,7 +35,7 @@ pub fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> i32 {
         .filter(|change| change.tag() == ChangeTag::Equal)
         .count();
 
-    num_shared_lines.try_into().unwrap()
+    num_shared_lines
 }
 
 /// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
