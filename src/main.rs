@@ -401,6 +401,8 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
         .unwrap()
         .progress_chars("#>-");
 
+    let now = std::time::Instant::now();
+
     // Walk through search path
     let mut file_match_vec: Vec<FileMatch> = WalkDir::new(search_root)
         .into_iter()
@@ -415,6 +417,8 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
 
     // Keep the top matches
     file_match_vec.truncate(args.count.into());
+
+    println!("Elapsed: {:.2?}", now.elapsed());
 
     Ok(busca::FileMatches(file_match_vec))
 }
