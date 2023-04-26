@@ -24,10 +24,10 @@ use walkdir::WalkDir;
 /// each compared file.
 #[derive(Parser, Debug)]
 #[command(author="Noah Baculi", version, about, long_about = None)]
-
 struct InputArgs {
     /// Local or absolute path to the reference comparison file
-    ref_file_path: PathBuf,
+    #[arg(short, long)]
+    ref_file_path: Option<PathBuf>,
 
     /// Directory or file in which to search. Defaults to CWD
     #[arg(short, long)]
@@ -54,7 +54,7 @@ struct InputArgs {
 
 #[derive(Debug, PartialEq)]
 struct Args {
-    ref_file_path: PathBuf,
+    reference_string: String,
     search_path: PathBuf,
     extensions: Option<Vec<String>>,
     max_lines: u32,
@@ -64,12 +64,18 @@ struct Args {
 
 /// Validates input args.
 fn validate_args(input_args: InputArgs) -> Result<Args, String> {
-    if !input_args.ref_file_path.is_file() {
-        return Err(format!(
-            "The reference file path '{}' could not be found.",
-            input_args.ref_file_path.display()
-        ));
-    }
+    let reference_string = match input_args.ref_file_path {
+        Some(ref_file_path) => match ref_file_path.is_file() {
+            true => fs::read_to_string(ref_file_path).unwrap(),
+            false => {
+                return Err(format!(
+                    "The reference file path '{}' could not be found.",
+                    ref_file_path.display()
+                ))
+            }
+        },
+        None => get_piped_input()?,
+    };
 
     // Assign to CWD if the arg is not given
     let search_path = input_args
@@ -85,7 +91,7 @@ fn validate_args(input_args: InputArgs) -> Result<Args, String> {
     }
 
     Ok(Args {
-        ref_file_path: input_args.ref_file_path,
+        reference_string,
         search_path,
         extensions: input_args.ext,
         max_lines: input_args.max_lines,
@@ -93,15 +99,16 @@ fn validate_args(input_args: InputArgs) -> Result<Args, String> {
         verbose: input_args.verbose,
     })
 }
+
 #[cfg(test)]
 mod test_validate_args {
     use super::*;
 
     fn get_valid_args() -> Args {
         Args {
-            ref_file_path: PathBuf::from(r"sample_dir_hello_world/file_2.py"),
-            search_path: PathBuf::from(r"sample_dir_hello_world"),
-            extensions: Some(vec!["py".to_string(), "json".to_string()]),
+            reference_string: fs::read_to_string("sample_dir_hello_world/file_3.py").unwrap(),
+            search_path: PathBuf::from("sample_dir_hello_world"),
+            extensions: Some(vec!["py".to_owned(), "json".to_owned()]),
             max_lines: 5000,
             count: 8,
             verbose: false,
@@ -114,7 +121,7 @@ mod test_validate_args {
 
         // No changes are made to parameters
         let input_args = InputArgs {
-            ref_file_path: valid_args.ref_file_path.clone(),
+            ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(valid_args.search_path.clone()),
             ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
@@ -124,7 +131,7 @@ mod test_validate_args {
         assert_eq!(
             validate_args(input_args),
             Ok(Args {
-                ref_file_path: valid_args.ref_file_path.clone(),
+                reference_string: valid_args.reference_string,
                 search_path: valid_args.search_path.clone(),
                 extensions: valid_args.extensions.clone(),
                 max_lines: valid_args.max_lines,
@@ -138,7 +145,7 @@ mod test_validate_args {
     fn override_args() {
         let valid_args = get_valid_args();
         let input_args = InputArgs {
-            ref_file_path: valid_args.ref_file_path.clone(),
+            ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: None,
             ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
@@ -148,7 +155,7 @@ mod test_validate_args {
         assert_eq!(
             validate_args(input_args),
             Ok(Args {
-                ref_file_path: valid_args.ref_file_path.clone(),
+                reference_string: valid_args.reference_string,
                 search_path: env::current_dir().unwrap(),
                 extensions: valid_args.extensions.clone(),
                 max_lines: valid_args.max_lines,
@@ -162,7 +169,7 @@ mod test_validate_args {
     fn nonexistent_reference_path() {
         let valid_args = get_valid_args();
         let input_args_wrong_ref_file = InputArgs {
-            ref_file_path: PathBuf::from(r"nonexistent_path"),
+            ref_file_path: Some(PathBuf::from("nonexistent_path")),
             search_path: Some(valid_args.search_path.clone()),
             ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
@@ -171,7 +178,7 @@ mod test_validate_args {
         };
         assert_eq!(
             validate_args(input_args_wrong_ref_file),
-            Err("The reference file path 'nonexistent_path' could not be found.".to_string())
+            Err("The reference file path 'nonexistent_path' could not be found.".to_owned())
         );
     }
 
@@ -179,8 +186,8 @@ mod test_validate_args {
     fn nonexistent_search_path() {
         let valid_args = get_valid_args();
         let input_args_wrong_ref_file = InputArgs {
-            ref_file_path: valid_args.ref_file_path.clone(),
-            search_path: Some(PathBuf::from(r"nonexistent_path")),
+            ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
+            search_path: Some(PathBuf::from("nonexistent_path")),
             ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
             count: valid_args.count,
@@ -188,9 +195,31 @@ mod test_validate_args {
         };
         assert_eq!(
             validate_args(input_args_wrong_ref_file),
-            Err("The search path 'nonexistent_path' could not be found.".to_string())
+            Err("The search path 'nonexistent_path' could not be found.".to_owned())
         );
     }
+}
+
+fn get_piped_input() -> Result<String, String> {
+    use std::io::{self, BufRead};
+
+    // If the current stdin is a TTY (interactive)
+    if atty::is(atty::Stream::Stdin) {
+        return Err("No piped input was received.".to_owned());
+    }
+
+    let piped_input: String = io::stdin()
+        .lock()
+        .lines()
+        .map(|l| l.unwrap())
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    if piped_input.is_empty() {
+        return Err("No piped input was received.".to_owned());
+    }
+
+    Ok(piped_input)
 }
 
 fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMatch> {
@@ -212,7 +241,7 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
         .unwrap_or(OsStr::new(""))
         .to_os_string()
         .into_string()
-        .unwrap_or("".to_string());
+        .unwrap_or("".to_owned());
 
     if (args.extensions.is_some()) && !(args.extensions.clone().unwrap().contains(&extension)) {
         if args.verbose {
@@ -257,8 +286,8 @@ mod test_compare_file {
 
     fn get_valid_args() -> Args {
         Args {
-            ref_file_path: PathBuf::from(r"sample_dir_hello_world/file_2.py"),
-            search_path: PathBuf::from(r"sample_dir_hello_world"),
+            reference_string: fs::read_to_string("sample_dir_hello_world/file_2.py").unwrap(),
+            search_path: PathBuf::from("sample_dir_hello_world"),
             extensions: None,
             max_lines: 5000,
             count: 8,
@@ -270,10 +299,9 @@ mod test_compare_file {
     fn skip_directory() {
         let valid_args = get_valid_args();
 
-        let ref_lines = fs::read_to_string(PathBuf::from(
-            r"sample_dir_hello_world/nested_dir/sample_python_file_3.py",
-        ))
-        .unwrap();
+        let ref_lines =
+            fs::read_to_string("sample_dir_hello_world/nested_dir/sample_python_file_3.py")
+                .unwrap();
 
         let dir_entry_result = WalkDir::new("sample_dir_hello_world")
             .into_iter()
@@ -292,7 +320,7 @@ mod test_compare_file {
 
         let file_path_str = "sample_dir_hello_world/nested_dir/sample_python_file_3.py";
 
-        let ref_lines = fs::read_to_string(PathBuf::from(file_path_str)).unwrap();
+        let ref_lines = fs::read_to_string(file_path_str).unwrap();
 
         let dir_entry_result = WalkDir::new(file_path_str)
             .into_iter()
@@ -316,7 +344,7 @@ mod test_compare_file {
         let valid_args = get_valid_args();
 
         let ref_lines = fs::read_to_string(PathBuf::from(
-            r"sample_dir_hello_world/nested_dir/sample_python_file_3.py",
+            "sample_dir_hello_world/nested_dir/sample_python_file_3.py",
         ))
         .unwrap();
 
@@ -342,7 +370,7 @@ mod test_compare_file {
     #[test]
     fn include_extensions() {
         let mut valid_args = get_valid_args();
-        valid_args.extensions = Some(vec!["json".to_string()]);
+        valid_args.extensions = Some(vec!["json".to_owned()]);
 
         let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
 
@@ -365,7 +393,7 @@ mod test_compare_file {
     #[test]
     fn exclude_extensions() {
         let mut valid_args = get_valid_args();
-        valid_args.extensions = Some(vec!["py".to_string()]);
+        valid_args.extensions = Some(vec!["py".to_owned()]);
 
         let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
 
@@ -382,8 +410,6 @@ mod test_compare_file {
 }
 
 fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
-    let ref_lines = fs::read_to_string(&args.ref_file_path).unwrap();
-
     let search_root = args
         .search_path
         .clone()
@@ -407,7 +433,7 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
         .par_iter()
         .progress_with_style(progress_bar_style)
         .filter_map(|dir_entry_result| match dir_entry_result {
-            Ok(dir_entry) => compare_file(dir_entry.path(), args, &ref_lines),
+            Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
             Err(_) => None,
         })
         .collect();
@@ -429,8 +455,9 @@ mod test_run_search {
 
     fn get_valid_args() -> Args {
         Args {
-            ref_file_path: PathBuf::from(r"sample_dir_hello_world/nested_dir/ref_B.py"),
-            search_path: PathBuf::from(r"sample_dir_hello_world"),
+            reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
+                .unwrap(),
+            search_path: PathBuf::from("sample_dir_hello_world"),
             extensions: None,
             max_lines: 5000,
             count: 2,
@@ -458,7 +485,7 @@ mod test_run_search {
     #[test]
     fn exclude_extensions() {
         let mut valid_args = get_valid_args();
-        valid_args.extensions = Some(vec!["json".to_string()]);
+        valid_args.extensions = Some(vec!["json".to_owned()]);
 
         let expected = busca::FileMatches(vec![FileMatch {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
@@ -513,9 +540,8 @@ fn main() {
 
     let selected_search = &search_results[ans.index];
     let selected_search_path = &selected_search.path;
-    let ref_lines = fs::read_to_string(&args.ref_file_path).unwrap();
     let comp_lines = fs::read_to_string(selected_search_path).unwrap();
-    output_detailed_diff(&ref_lines, &comp_lines);
+    output_detailed_diff(&args.reference_string, &comp_lines);
 }
 
 fn output_detailed_diff(ref_lines: &str, comp_lines: &str) {
