@@ -12,6 +12,12 @@ rm -r .github
 cd -
 ```
 
+## Sample run to time
+
+```shell
+cargo run -- sample-comprehensive/projects/Billing_system/biling_system.py
+```
+
 ## Run tests
 
 ```shell

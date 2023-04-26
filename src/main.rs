@@ -109,7 +109,7 @@ mod test_validate_args {
             extensions: Some(vec!["py".to_string(), "json".to_string()]),
             max_lines: 5000,
             count: 8,
-            verbose: true,
+            verbose: false,
         }
     }
 
@@ -203,7 +203,6 @@ fn compare_file(
     args: &Args,
     ref_lines: &str,
 ) -> Option<FileMatch> {
-
     if dir_entry_result.is_err() {
         if args.verbose {
             println!(
@@ -283,7 +282,7 @@ mod test_compare_file {
             extensions: None,
             max_lines: 5000,
             count: 8,
-            verbose: true,
+            verbose: false,
         }
     }
 
@@ -301,8 +300,7 @@ mod test_compare_file {
             .next()
             .unwrap();
 
-        let file_comparison =
-            compare_file(dir_entry_result, &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result, &valid_args, &ref_lines);
 
         assert_eq!(file_comparison, None);
     }
@@ -317,8 +315,7 @@ mod test_compare_file {
 
         let dir_entry_result = WalkDir::new(file_path_str).into_iter().next().unwrap();
 
-        let file_comparison =
-            compare_file(dir_entry_result, &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result, &valid_args, &ref_lines);
 
         assert_eq!(
             file_comparison,
@@ -342,8 +339,7 @@ mod test_compare_file {
 
         let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
 
-        let file_comparison =
-            compare_file(dir_entry_result, &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result, &valid_args, &ref_lines);
 
         assert_eq!(
             file_comparison,
@@ -356,7 +352,6 @@ mod test_compare_file {
 
     #[test]
     fn include_extensions() {
-        // TODO
         let mut valid_args = get_valid_args();
         valid_args.extensions = Some(vec!["json".to_string()]);
 
@@ -364,8 +359,7 @@ mod test_compare_file {
 
         let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
 
-        let file_comparison =
-            compare_file(dir_entry_result, &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result, &valid_args, "");
 
         assert_eq!(
             file_comparison,
@@ -384,13 +378,9 @@ mod test_compare_file {
 
         let dir_entry_result = WalkDir::new(comp_path_str).into_iter().next().unwrap();
 
-        let file_comparison =
-            compare_file(dir_entry_result, &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result, &valid_args, "");
 
-        assert_eq!(
-            file_comparison,
-            None
-        );
+        assert_eq!(file_comparison, None);
     }
 }
 
@@ -405,13 +395,11 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
         .unwrap();
 
     // Create progress bar style
-    let progress_bar_style = 
-        ProgressStyle::with_template(
+    let progress_bar_style = ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
         )
         .unwrap()
         .progress_chars("#>-");
-
 
     // Walk through search path
     let mut file_match_vec: Vec<FileMatch> = WalkDir::new(search_root)
@@ -419,9 +407,7 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
         .collect::<Vec<_>>()
         .into_iter()
         .progress_with_style(progress_bar_style)
-        .filter_map(|dir_entry_result| {
-            compare_file(dir_entry_result, args, &ref_lines)
-        })
+        .filter_map(|dir_entry_result| compare_file(dir_entry_result, args, &ref_lines))
         .collect();
 
     // Sort by percent match
@@ -431,6 +417,59 @@ fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
     file_match_vec.truncate(args.count.into());
 
     Ok(busca::FileMatches(file_match_vec))
+}
+
+#[cfg(test)]
+mod test_run_search {
+    use super::*;
+
+    fn get_valid_args() -> Args {
+        Args {
+            ref_file_path: PathBuf::from(r"sample_dir_hello_world/nested_dir/ref_B.py"),
+            search_path: PathBuf::from(r"sample_dir_hello_world"),
+            extensions: None,
+            max_lines: 5000,
+            count: 4,
+            verbose: false,
+        }
+    }
+
+    #[test]
+    fn normal_search() {
+        let valid_args = get_valid_args();
+
+        let expected = busca::FileMatches(vec![
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
+                perc_shared: 1.0,
+            },
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/file_1.py"),
+                perc_shared: 0.14814815,
+            },
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/file_2.py"),
+                perc_shared: 0.11111111,
+            },
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_python_file_3.py"),
+                perc_shared: 0.11111111,
+            },
+        ]);
+        assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
+
+    #[test]
+    fn exclude_extensions() {
+        let mut valid_args = get_valid_args();
+        valid_args.extensions = Some(vec!["json".to_string()]);
+
+        let expected = busca::FileMatches(vec![FileMatch {
+            path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
+            perc_shared: 0.0,
+        }]);
+        assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
 }
 
 struct Line(Option<usize>);

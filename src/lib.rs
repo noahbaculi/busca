@@ -74,7 +74,7 @@ pub struct FileMatch {
     pub path: PathBuf,
     pub perc_shared: f32,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileMatches(pub Vec<FileMatch>);
 
 // impl FileMatches {}
