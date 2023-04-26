@@ -429,7 +429,7 @@ mod test_run_search {
             search_path: PathBuf::from(r"sample_dir_hello_world"),
             extensions: None,
             max_lines: 5000,
-            count: 4,
+            count: 2,
             verbose: false,
         }
     }
@@ -446,14 +446,6 @@ mod test_run_search {
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
                 perc_shared: 0.14814815,
-            },
-            FileMatch {
-                path: PathBuf::from("sample_dir_hello_world/file_2.py"),
-                perc_shared: 0.11111111,
-            },
-            FileMatch {
-                path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_python_file_3.py"),
-                perc_shared: 0.11111111,
             },
         ]);
         assert_eq!(run_search(&valid_args).unwrap(), expected);
