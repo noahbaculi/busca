@@ -13,6 +13,43 @@ use std::path::Path;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
+fn graceful_panic(error_str: String) -> ! {
+    eprintln!("{}", error_str);
+    std::process::exit(1);
+}
+fn main() {
+    let input_args = InputArgs::parse();
+
+    let args = match input_args.into_args() {
+        Ok(args) => args,
+        Err(err) => graceful_panic(err),
+    };
+
+    let search_results = run_search(&args).unwrap();
+
+    let file_matches = &search_results.to_string();
+    let mut grid_options: Vec<_> = file_matches.split('\n').collect();
+
+    // Remove the last new line
+    grid_options.remove(grid_options.len() - 1);
+
+    if grid_options.is_empty() {
+        println!("No files found that match the criteria.");
+        std::process::exit(0);
+    }
+
+    let ans = match Select::new("Select a file to compare:", grid_options).raw_prompt() {
+        Ok(answer) => answer,
+        Err(InquireError::OperationCanceled) => std::process::exit(0),
+        Err(err) => graceful_panic(err.to_string()),
+    };
+
+    let selected_search = &search_results[ans.index];
+    let selected_search_path = &selected_search.path;
+    let comp_lines = fs::read_to_string(selected_search_path).unwrap();
+    output_detailed_diff(&args.reference_string, &comp_lines);
+}
+
 /// Simple utility to find the closest matches to a reference file in a
 /// directory based on the number of lines in the reference file that exist in
 /// each compared file.
@@ -56,46 +93,48 @@ struct Args {
     verbose: bool,
 }
 
-/// Validates input args.
-fn validate_args(input_args: InputArgs) -> Result<Args, String> {
-    let reference_string = match input_args.ref_file_path {
-        Some(ref_file_path) => match ref_file_path.is_file() {
-            true => fs::read_to_string(ref_file_path).unwrap(),
-            false => {
-                return Err(format!(
-                    "The reference file path '{}' could not be found.",
-                    ref_file_path.display()
-                ))
-            }
-        },
-        None => get_piped_input()?,
-    };
+impl InputArgs {
+    // Consumes and validates InputArgs and returns Args
+    pub fn into_args(self) -> Result<Args, String> {
+        let reference_string = match self.ref_file_path {
+            Some(ref_file_path) => match ref_file_path.is_file() {
+                true => fs::read_to_string(ref_file_path).unwrap(),
+                false => {
+                    return Err(format!(
+                        "The reference file path '{}' could not be found.",
+                        ref_file_path.display()
+                    ))
+                }
+            },
+            None => get_piped_input()?,
+        };
 
-    // Assign to CWD if the arg is not given
-    let search_path = input_args
-        .search_path
-        .clone()
-        .unwrap_or(env::current_dir().unwrap());
+        // Assign to CWD if the arg is not given
+        let search_path = self
+            .search_path
+            .clone()
+            .unwrap_or(env::current_dir().unwrap());
 
-    if !search_path.is_file() & !search_path.is_dir() {
-        return Err(format!(
-            "The search path '{}' could not be found.",
-            search_path.display()
-        ));
+        if !search_path.is_file() & !search_path.is_dir() {
+            return Err(format!(
+                "The search path '{}' could not be found.",
+                search_path.display()
+            ));
+        }
+
+        Ok(Args {
+            reference_string,
+            search_path,
+            extensions: self.ext,
+            max_lines: self.max_lines,
+            count: self.count,
+            verbose: self.verbose,
+        })
     }
-
-    Ok(Args {
-        reference_string,
-        search_path,
-        extensions: input_args.ext,
-        max_lines: input_args.max_lines,
-        count: input_args.count,
-        verbose: input_args.verbose,
-    })
 }
 
 #[cfg(test)]
-mod test_validate_args {
+mod test_input_args_validation {
     use super::*;
 
     fn get_valid_args() -> Args {
@@ -123,7 +162,7 @@ mod test_validate_args {
             verbose: valid_args.verbose,
         };
         assert_eq!(
-            validate_args(input_args),
+            input_args.into_args(),
             Ok(Args {
                 reference_string: valid_args.reference_string,
                 search_path: valid_args.search_path.clone(),
@@ -147,7 +186,7 @@ mod test_validate_args {
             verbose: valid_args.verbose,
         };
         assert_eq!(
-            validate_args(input_args),
+            input_args.into_args(),
             Ok(Args {
                 reference_string: valid_args.reference_string,
                 search_path: env::current_dir().unwrap(),
@@ -171,7 +210,7 @@ mod test_validate_args {
             verbose: valid_args.verbose,
         };
         assert_eq!(
-            validate_args(input_args_wrong_ref_file),
+            input_args_wrong_ref_file.into_args(),
             Err("The reference file path 'nonexistent_path' could not be found.".to_owned())
         );
     }
@@ -188,7 +227,7 @@ mod test_validate_args {
             verbose: valid_args.verbose,
         };
         assert_eq!(
-            validate_args(input_args_wrong_ref_file),
+            input_args_wrong_ref_file.into_args(),
             Err("The search path 'nonexistent_path' could not be found.".to_owned())
         );
     }
@@ -214,6 +253,92 @@ fn get_piped_input() -> Result<String, String> {
     }
 
     Ok(piped_input)
+}
+
+fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
+    let search_root = args
+        .search_path
+        .clone()
+        .into_os_string()
+        .into_string()
+        .unwrap();
+
+    // Create progress bar style
+    let progress_bar_style = ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
+        )
+        .unwrap()
+        .progress_chars("#>-");
+
+    let now = std::time::Instant::now();
+
+    // Walk through search path
+    let mut file_match_vec: Vec<FileMatch> = WalkDir::new(search_root)
+        .into_iter()
+        .collect::<Vec<_>>()
+        .par_iter()
+        .progress_with_style(progress_bar_style)
+        .filter_map(|dir_entry_result| match dir_entry_result {
+            Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+            Err(_) => None,
+        })
+        .collect();
+
+    // Sort by percent match
+    file_match_vec.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
+
+    // Keep the top matches
+    file_match_vec.truncate(args.count.into());
+
+    println!("Elapsed: {:.2?}", now.elapsed());
+
+    Ok(busca::FileMatches(file_match_vec))
+}
+
+#[cfg(test)]
+mod test_run_search {
+    use super::*;
+
+    fn get_valid_args() -> Args {
+        Args {
+            reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
+                .unwrap(),
+            search_path: PathBuf::from("sample_dir_hello_world"),
+            extensions: None,
+            max_lines: 5000,
+            count: 2,
+            verbose: false,
+        }
+    }
+
+    #[test]
+    fn normal_search() {
+        let valid_args = get_valid_args();
+
+        let expected = busca::FileMatches(vec![
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
+                perc_shared: 1.0,
+            },
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/file_1.py"),
+                perc_shared: 0.14814815,
+            },
+        ]);
+        assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
+
+    #[test]
+    fn exclude_extensions() {
+        let mut valid_args = get_valid_args();
+        valid_args.extensions = Some(vec!["json".to_owned()]);
+
+        let expected = busca::FileMatches(vec![FileMatch {
+            path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
+            perc_shared: 0.0,
+        }]);
+        assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
 }
 
 fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMatch> {
@@ -403,141 +528,6 @@ mod test_compare_file {
     }
 }
 
-fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
-    let search_root = args
-        .search_path
-        .clone()
-        .into_os_string()
-        .into_string()
-        .unwrap();
-
-    // Create progress bar style
-    let progress_bar_style = ProgressStyle::with_template(
-            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
-        )
-        .unwrap()
-        .progress_chars("#>-");
-
-    let now = std::time::Instant::now();
-
-    // Walk through search path
-    let mut file_match_vec: Vec<FileMatch> = WalkDir::new(search_root)
-        .into_iter()
-        .collect::<Vec<_>>()
-        .par_iter()
-        .progress_with_style(progress_bar_style)
-        .filter_map(|dir_entry_result| match dir_entry_result {
-            Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
-            Err(_) => None,
-        })
-        .collect();
-
-    // Sort by percent match
-    file_match_vec.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
-
-    // Keep the top matches
-    file_match_vec.truncate(args.count.into());
-
-    println!("Elapsed: {:.2?}", now.elapsed());
-
-    Ok(busca::FileMatches(file_match_vec))
-}
-
-#[cfg(test)]
-mod test_run_search {
-    use super::*;
-
-    fn get_valid_args() -> Args {
-        Args {
-            reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
-                .unwrap(),
-            search_path: PathBuf::from("sample_dir_hello_world"),
-            extensions: None,
-            max_lines: 5000,
-            count: 2,
-            verbose: false,
-        }
-    }
-
-    #[test]
-    fn normal_search() {
-        let valid_args = get_valid_args();
-
-        let expected = busca::FileMatches(vec![
-            FileMatch {
-                path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                perc_shared: 1.0,
-            },
-            FileMatch {
-                path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                perc_shared: 0.14814815,
-            },
-        ]);
-        assert_eq!(run_search(&valid_args).unwrap(), expected);
-    }
-
-    #[test]
-    fn exclude_extensions() {
-        let mut valid_args = get_valid_args();
-        valid_args.extensions = Some(vec!["json".to_owned()]);
-
-        let expected = busca::FileMatches(vec![FileMatch {
-            path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
-            perc_shared: 0.0,
-        }]);
-        assert_eq!(run_search(&valid_args).unwrap(), expected);
-    }
-}
-
-struct Line(Option<usize>);
-
-impl fmt::Display for Line {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            None => write!(f, "    "),
-            Some(idx) => write!(f, "{:<4}", idx + 1),
-        }
-    }
-}
-
-fn graceful_panic(error_str: String) -> ! {
-    eprintln!("{}", error_str);
-    std::process::exit(1);
-}
-
-fn main() {
-    let input_args = InputArgs::parse();
-
-    let args = match validate_args(input_args) {
-        Ok(args) => args,
-        Err(err) => graceful_panic(err),
-    };
-
-    let search_results = run_search(&args).unwrap();
-
-    let file_matches = &search_results.to_string();
-    let mut grid_options: Vec<_> = file_matches.split('\n').collect();
-
-    // Remove the last new line
-    grid_options.remove(grid_options.len() - 1);
-
-    if grid_options.is_empty() {
-        println!("No files found that match the criteria.");
-        std::process::exit(0);
-    }
-
-    let ans = match Select::new("Select a file to compare:", grid_options).raw_prompt() {
-        Ok(answer) => answer,
-        Err(InquireError::OperationCanceled) => std::process::exit(0),
-        Err(err) => graceful_panic(err.to_string()),
-    };
-
-    let selected_search = &search_results[ans.index];
-    let selected_search_path = &selected_search.path;
-    let comp_lines = fs::read_to_string(selected_search_path).unwrap();
-    output_detailed_diff(&args.reference_string, &comp_lines);
-}
-
 fn output_detailed_diff(ref_lines: &str, comp_lines: &str) {
     let diff = TextDiff::from_lines(ref_lines, comp_lines);
 
@@ -569,6 +559,17 @@ fn output_detailed_diff(ref_lines: &str, comp_lines: &str) {
                     println!();
                 }
             }
+        }
+    }
+}
+
+struct Line(Option<usize>);
+
+impl fmt::Display for Line {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            None => write!(f, "    "),
+            Some(idx) => write!(f, "{:<4}", idx + 1),
         }
     }
 }

@@ -3,6 +3,38 @@ use std::fmt;
 use std::path::PathBuf;
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 
+/// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
+///
+/// # Examples
+///
+/// ```
+/// //                ✓   ✓  x   ✓   x      = 3 / 5 = 0.6
+/// let ref_lines = "12\n14\n5\n17\n19\n";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_perc_shared_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 0.6);
+/// ```
+/// ---
+/// ```
+/// //                ✓   ✓  x   x    = 2 / 4 = 0.5
+/// let ref_lines = "12\n14\n5\n17";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_perc_shared_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 0.5);
+/// ```
+///
+pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
+    let num_shared_lines = get_num_shared_lines(ref_lines, comp_lines);
+
+    // If ref file ends with a newline, do not count it as line compared
+    let mut num_ref_lines = ref_lines.split('\n').count();
+    if ref_lines.ends_with('\n') {
+        num_ref_lines -= 1;
+    }
+
+    num_shared_lines as f32 / num_ref_lines as f32
+}
+
 /// Returns the number of lines from `ref_lines` that also exist in `comp_lines`.
 ///
 /// Note: Final new lines are included in the diff comparisons.
@@ -38,37 +70,6 @@ pub fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> usize {
     num_shared_lines
 }
 
-/// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
-///
-/// # Examples
-///
-/// ```
-/// //                ✓   ✓  x   ✓   x      = 3 / 5 = 0.6
-/// let ref_lines = "12\n14\n5\n17\n19\n";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_perc_shared_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 0.6);
-/// ```
-/// ---
-/// ```
-/// //                ✓   ✓  x   x    = 2 / 4 = 0.5
-/// let ref_lines = "12\n14\n5\n17";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_perc_shared_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 0.5);
-/// ```
-///
-pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
-    let num_shared_lines = get_num_shared_lines(ref_lines, comp_lines);
-
-    // If ref file ends with a newline, do not count it as line compared
-    let mut num_ref_lines = ref_lines.split('\n').count();
-    if ref_lines.ends_with('\n') {
-        num_ref_lines -= 1;
-    }
-
-    num_shared_lines as f32 / num_ref_lines as f32
-}
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileMatch {
     pub path: PathBuf,
@@ -76,8 +77,6 @@ pub struct FileMatch {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileMatches(pub Vec<FileMatch>);
-
-// impl FileMatches {}
 
 impl std::ops::Deref for FileMatches {
     type Target = Vec<FileMatch>;
