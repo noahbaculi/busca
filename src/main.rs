@@ -38,7 +38,10 @@ fn main() {
         std::process::exit(0);
     }
 
-    let ans = match Select::new("Select a file to compare:", grid_options).raw_prompt() {
+    let ans = match Select::new("Select a file to compare:", grid_options)
+        .with_page_size(10)
+        .raw_prompt()
+    {
         Ok(answer) => answer,
         Err(InquireError::OperationCanceled) => std::process::exit(0),
         Err(err) => graceful_panic(&err.to_string()),
