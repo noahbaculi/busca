@@ -71,22 +71,17 @@ struct InputArgs {
     #[arg(short, long)]
     search_path: Option<PathBuf>,
 
-    /// File extensions to include in the search. ex: `-e py -e json`. Defaults to all files with
-    /// valid UTF-8 contents
-    #[arg(short, long)]
-    ext: Option<Vec<String>>,
-
     /// The number of lines to consider when comparing files. Files with more
     /// lines will be skipped.
     #[arg(short, long, default_value_t = 10_000)]
     max_lines: u32,
 
     /// Globs that qualify a file for comparison
-    #[arg(long)]
+    #[arg(short, long)]
     include_glob: Option<Vec<String>>,
 
     /// Globs that disqualify a file from comparison
-    #[arg(long)]
+    #[arg(short = 'x', long)]
     exclude_glob: Option<Vec<String>>,
 
     /// Number of results to display
@@ -102,7 +97,6 @@ struct InputArgs {
 struct Args {
     reference_string: String,
     search_path: PathBuf,
-    extensions: Option<Vec<String>>,
     max_lines: u32,
     include_patterns: Option<Vec<Pattern>>,
     exclude_patterns: Option<Vec<Pattern>>,
@@ -173,7 +167,6 @@ impl InputArgs {
         Ok(Args {
             reference_string,
             search_path,
-            extensions: self.ext,
             max_lines: self.max_lines,
             include_patterns,
             exclude_patterns,
@@ -191,7 +184,6 @@ mod test_input_args_validation {
         Args {
             reference_string: fs::read_to_string("sample_dir_hello_world/file_3.py").unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            extensions: Some(vec!["py".to_owned(), "json".to_owned()]),
             max_lines: 5000,
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
@@ -208,7 +200,6 @@ mod test_input_args_validation {
         let input_args = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(valid_args.search_path.clone()),
-            ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
@@ -220,7 +211,6 @@ mod test_input_args_validation {
             Ok(Args {
                 reference_string: valid_args.reference_string,
                 search_path: valid_args.search_path.clone(),
-                extensions: valid_args.extensions.clone(),
                 max_lines: valid_args.max_lines,
                 include_patterns: valid_args.include_patterns.clone(),
                 exclude_patterns: valid_args.exclude_patterns.clone(),
@@ -236,7 +226,6 @@ mod test_input_args_validation {
         let input_args = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: None,
-            ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
@@ -248,7 +237,6 @@ mod test_input_args_validation {
             Ok(Args {
                 reference_string: valid_args.reference_string,
                 search_path: env::current_dir().unwrap(),
-                extensions: valid_args.extensions.clone(),
                 max_lines: valid_args.max_lines,
                 include_patterns: valid_args.include_patterns.clone(),
                 exclude_patterns: valid_args.exclude_patterns.clone(),
@@ -264,7 +252,6 @@ mod test_input_args_validation {
         let input_args_wrong_ref_file = InputArgs {
             ref_file_path: Some(PathBuf::from("nonexistent_path")),
             search_path: Some(valid_args.search_path.clone()),
-            ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
@@ -283,7 +270,6 @@ mod test_input_args_validation {
         let input_args_wrong_ref_file = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(PathBuf::from("nonexistent_path")),
-            ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
@@ -375,7 +361,6 @@ mod test_run_search {
             reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
                 .unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            extensions: None,
             max_lines: 5000,
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
@@ -441,27 +426,6 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
     if !comp_path.is_file() {
         if args.verbose {
             println!(" | skipped since it is not a file.");
-        }
-        return None;
-    }
-
-    // Skip paths that do not match the extensions
-    let extension = comp_path
-        .extension()
-        .unwrap_or(std::ffi::OsStr::new(""))
-        .to_os_string()
-        .into_string()
-        .unwrap_or("".to_owned());
-
-    if args.extensions.is_some()
-        && !(args
-            .extensions
-            .clone()
-            .unwrap_or(vec![])
-            .contains(&extension))
-    {
-        if args.verbose {
-            println!(" | skipped since it does not match the extension filter.");
         }
         return None;
     }
@@ -538,7 +502,6 @@ mod test_compare_file {
         Args {
             reference_string: fs::read_to_string("sample_dir_hello_world/file_2.py").unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            extensions: None,
             max_lines: 5000,
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
