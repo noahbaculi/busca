@@ -1,6 +1,7 @@
 use busca::{FileMatch, FileMatches};
 use clap::Parser;
 use console::{style, Style};
+use glob::Pattern;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 use inquire::{InquireError, Select};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -30,17 +31,17 @@ fn main() {
     };
 
     let file_matches = &search_results.to_string();
-    let mut grid_options: Vec<_> = file_matches.split('\n').collect();
-
-    // Remove the last new line
-    grid_options.remove(grid_options.len() - 1);
+    let grid_options: Vec<&str> = file_matches.split('\n').collect();
 
     if grid_options.is_empty() {
         println!("No files found that match the criteria.");
         std::process::exit(0);
     }
 
-    let ans = match Select::new("Select a file to compare:", grid_options).raw_prompt() {
+    let ans = match Select::new("Select a file to compare:", grid_options)
+        .with_page_size(10)
+        .raw_prompt()
+    {
         Ok(answer) => answer,
         Err(InquireError::OperationCanceled) => std::process::exit(0),
         Err(err) => graceful_panic(&err.to_string()),
@@ -59,9 +60,13 @@ fn main() {
 /// directory based on the number of lines in the reference file that exist in
 /// each compared file.
 #[derive(Parser, Debug)]
-#[command(author="Noah Baculi", version, about, long_about = None)]
+#[command(author="Noah Baculi", version, about, long_about = None, override_usage="\
+    busca --ref-file-path <REF_FILE_PATH> [OPTIONS]\n       \
+    <SomeCommand> | busca [OPTIONS]"
+)]
 struct InputArgs {
-    /// Local or absolute path to the reference comparison file
+    /// Local or absolute path to the reference comparison file. Overrides any
+    /// piped input
     #[arg(short, long)]
     ref_file_path: Option<PathBuf>,
 
@@ -69,15 +74,18 @@ struct InputArgs {
     #[arg(short, long)]
     search_path: Option<PathBuf>,
 
-    /// File extensions to include in the search. ex: `-e py -e json`. Defaults to all files with
-    /// valid UTF-8 contents
-    #[arg(short, long)]
-    ext: Option<Vec<String>>,
-
     /// The number of lines to consider when comparing files. Files with more
     /// lines will be skipped.
     #[arg(short, long, default_value_t = 10_000)]
     max_lines: u32,
+
+    /// Globs that qualify a file for comparison
+    #[arg(short, long)]
+    include_glob: Option<Vec<String>>,
+
+    /// Globs that disqualify a file from comparison
+    #[arg(short = 'x', long)]
+    exclude_glob: Option<Vec<String>>,
 
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
@@ -92,8 +100,9 @@ struct InputArgs {
 struct Args {
     reference_string: String,
     search_path: PathBuf,
-    extensions: Option<Vec<String>>,
     max_lines: u32,
+    include_patterns: Option<Vec<Pattern>>,
+    exclude_patterns: Option<Vec<Pattern>>,
     count: u8,
     verbose: bool,
 }
@@ -135,11 +144,35 @@ impl InputArgs {
             ));
         }
 
+        fn parse_glob_pattern(pattern_string: &str) -> Pattern {
+            match glob::Pattern::new(pattern_string) {
+                Ok(pattern) => pattern,
+                Err(e) => graceful_panic(&format!("{:?} for '{}'", e, pattern_string)),
+            }
+        }
+
+        // Parse the include glob patterns from input args strings
+        let include_patterns = self.include_glob.map(|include_substring_vec| {
+            include_substring_vec
+                .iter()
+                .map(|include_substring| parse_glob_pattern(include_substring))
+                .collect()
+        });
+
+        // Parse the exclude glob patterns from input args strings
+        let exclude_patterns = self.exclude_glob.map(|exclude_substring_vec| {
+            exclude_substring_vec
+                .iter()
+                .map(|exclude_substring| parse_glob_pattern(exclude_substring))
+                .collect()
+        });
+
         Ok(Args {
             reference_string,
             search_path,
-            extensions: self.ext,
             max_lines: self.max_lines,
+            include_patterns,
+            exclude_patterns,
             count: self.count,
             verbose: self.verbose,
         })
@@ -154,8 +187,9 @@ mod test_input_args_validation {
         Args {
             reference_string: fs::read_to_string("sample_dir_hello_world/file_3.py").unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            extensions: Some(vec!["py".to_owned(), "json".to_owned()]),
             max_lines: 5000,
+            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: 8,
             verbose: false,
         }
@@ -169,8 +203,9 @@ mod test_input_args_validation {
         let input_args = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(valid_args.search_path.clone()),
-            ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
+            include_glob: Some(vec!["*.py".to_owned()]),
+            exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count,
             verbose: valid_args.verbose,
         };
@@ -179,8 +214,9 @@ mod test_input_args_validation {
             Ok(Args {
                 reference_string: valid_args.reference_string,
                 search_path: valid_args.search_path.clone(),
-                extensions: valid_args.extensions.clone(),
                 max_lines: valid_args.max_lines,
+                include_patterns: valid_args.include_patterns.clone(),
+                exclude_patterns: valid_args.exclude_patterns.clone(),
                 count: valid_args.count,
                 verbose: valid_args.verbose,
             })
@@ -193,8 +229,9 @@ mod test_input_args_validation {
         let input_args = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: None,
-            ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
+            include_glob: Some(vec!["*.py".to_owned()]),
+            exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count,
             verbose: valid_args.verbose,
         };
@@ -203,8 +240,9 @@ mod test_input_args_validation {
             Ok(Args {
                 reference_string: valid_args.reference_string,
                 search_path: env::current_dir().unwrap(),
-                extensions: valid_args.extensions.clone(),
                 max_lines: valid_args.max_lines,
+                include_patterns: valid_args.include_patterns.clone(),
+                exclude_patterns: valid_args.exclude_patterns.clone(),
                 count: valid_args.count,
                 verbose: valid_args.verbose,
             })
@@ -217,8 +255,9 @@ mod test_input_args_validation {
         let input_args_wrong_ref_file = InputArgs {
             ref_file_path: Some(PathBuf::from("nonexistent_path")),
             search_path: Some(valid_args.search_path.clone()),
-            ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
+            include_glob: Some(vec!["*.py".to_owned()]),
+            exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count,
             verbose: valid_args.verbose,
         };
@@ -234,8 +273,9 @@ mod test_input_args_validation {
         let input_args_wrong_ref_file = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(PathBuf::from("nonexistent_path")),
-            ext: valid_args.extensions.clone(),
             max_lines: valid_args.max_lines,
+            include_glob: Some(vec!["*.py".to_owned()]),
+            exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count,
             verbose: valid_args.verbose,
         };
@@ -324,8 +364,9 @@ mod test_run_search {
             reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
                 .unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            extensions: None,
             max_lines: 5000,
+            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: 2,
             verbose: false,
         }
@@ -349,14 +390,32 @@ mod test_run_search {
     }
 
     #[test]
-    fn exclude_extensions() {
+    fn include_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.extensions = Some(vec!["json".to_owned()]);
+        valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
 
         let expected = busca::FileMatches(vec![FileMatch {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
             perc_shared: 0.0,
         }]);
+        assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
+
+    #[test]
+    fn exclude_glob() {
+        let mut valid_args = get_valid_args();
+        valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+
+        let expected = busca::FileMatches(vec![
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
+                perc_shared: 1.0,
+            },
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/file_1.py"),
+                perc_shared: 0.14814815,
+            },
+        ]);
         assert_eq!(run_search(&valid_args).unwrap(), expected);
     }
 }
@@ -374,26 +433,39 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
         return None;
     }
 
-    // Skip paths that do not match the extensions
-    let extension = comp_path
-        .extension()
-        .unwrap_or(std::ffi::OsStr::new(""))
-        .to_os_string()
-        .into_string()
-        .unwrap_or("".to_owned());
+    // Skip paths that do not contain the include glob pattern
+    match &args.include_patterns {
+        Some(include_pattern_vec) => {
+            let contains_glob_pattern = include_pattern_vec
+                .iter()
+                .any(|include_pattern| include_pattern.matches_path(comp_path));
 
-    if args.extensions.is_some()
-        && !(args
-            .extensions
-            .clone()
-            .unwrap_or(vec![])
-            .contains(&extension))
-    {
-        if args.verbose {
-            println!(" | skipped since it does not match the extension filter.");
+            if !contains_glob_pattern {
+                if args.verbose {
+                    println!(" | skipped since it does not contain the include glob pattern.");
+                }
+                return None;
+            }
         }
-        return None;
-    }
+        None => {}
+    };
+
+    // Skip paths that contain the exclude glob pattern
+    match &args.exclude_patterns {
+        Some(exclude_pattern_vec) => {
+            let contains_glob_pattern = exclude_pattern_vec
+                .iter()
+                .any(|include_pattern| include_pattern.matches_path(comp_path));
+
+            if contains_glob_pattern {
+                if args.verbose {
+                    println!(" | skipped since it contains the exclude glob pattern.");
+                }
+                return None;
+            }
+        }
+        None => (),
+    };
 
     let comp_reader = fs::read_to_string(comp_path);
     let comp_lines = match comp_reader {
@@ -433,8 +505,9 @@ mod test_compare_file {
         Args {
             reference_string: fs::read_to_string("sample_dir_hello_world/file_2.py").unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            extensions: None,
             max_lines: 5000,
+            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: 8,
             verbose: false,
         }
@@ -513,9 +586,9 @@ mod test_compare_file {
     }
 
     #[test]
-    fn include_extensions() {
+    fn include_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.extensions = Some(vec!["json".to_owned()]);
+        valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
 
         let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
 
@@ -536,9 +609,9 @@ mod test_compare_file {
         );
     }
     #[test]
-    fn exclude_extensions() {
+    fn exclude_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.extensions = Some(vec!["py".to_owned()]);
+        valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
 
         let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
 
