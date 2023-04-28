@@ -48,7 +48,10 @@ fn main() {
 
     let selected_search = &search_results[ans.index];
     let selected_search_path = &selected_search.path;
-    let comp_lines = fs::read_to_string(selected_search_path).unwrap();
+    let comp_lines = match fs::read_to_string(selected_search_path) {
+        Ok(comp_lines) => comp_lines,
+        Err(e) => graceful_panic(e.to_string()),
+    };
     output_detailed_diff(&args.reference_string, &comp_lines);
 }
 
@@ -100,22 +103,30 @@ impl InputArgs {
     pub fn into_args(self) -> Result<Args, String> {
         let reference_string = match self.ref_file_path {
             Some(ref_file_path) => match ref_file_path.is_file() {
-                true => fs::read_to_string(ref_file_path).unwrap(),
                 false => {
                     return Err(format!(
-                        "The reference file path '{}' could not be found.",
+                        "The reference file path '{}' is not a file.",
                         ref_file_path.display()
                     ))
                 }
+
+                true => match fs::read_to_string(ref_file_path) {
+                    Err(e) => return Err(format!("{:?}", e)),
+                    Ok(ref_file_string) => ref_file_string,
+                },
             },
             None => get_piped_input()?,
         };
 
-        // Assign to CWD if the arg is not given
-        let search_path = self
-            .search_path
-            .clone()
-            .unwrap_or(env::current_dir().unwrap());
+        // Assign search_path to CWD if the arg is not given
+        let search_path = match self.search_path {
+            Some(input_search_path) => input_search_path,
+
+            None => match env::current_dir() {
+                Ok(cwd_path) => cwd_path,
+                Err(e) => return Err(format!("{:?}", e)),
+            },
+        };
 
         if !search_path.is_file() & !search_path.is_dir() {
             return Err(format!(
@@ -213,7 +224,7 @@ mod test_input_args_validation {
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
-            Err("The reference file path 'nonexistent_path' could not be found.".to_owned())
+            Err("The reference file path 'nonexistent_path' is not a file.".to_owned())
         );
     }
 
@@ -246,7 +257,7 @@ fn get_piped_input() -> Result<String, String> {
     let piped_input: String = io::stdin()
         .lock()
         .lines()
-        .map(|l| l.unwrap())
+        .map(|l| l.unwrap_or("".to_owned()))
         .collect::<Vec<String>>()
         .join("\n");
 
@@ -297,7 +308,11 @@ fn run_search(args: &Args) -> Result<FileMatches, SearchErr> {
     };
 
     // Sort by percent match
-    file_match_vec.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
+    file_match_vec.sort_by(|a, b| {
+        b.perc_shared
+            .partial_cmp(&a.perc_shared)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Keep the top matches
     file_match_vec.truncate(args.count.into());
@@ -372,7 +387,13 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
         .into_string()
         .unwrap_or("".to_owned());
 
-    if (args.extensions.is_some()) && !(args.extensions.clone().unwrap().contains(&extension)) {
+    if args.extensions.is_some()
+        && !(args
+            .extensions
+            .clone()
+            .unwrap_or(vec![])
+            .contains(&extension))
+    {
         if args.verbose {
             println!(" | skipped since it does not match the extension filter.");
         }
