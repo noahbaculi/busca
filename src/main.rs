@@ -6,9 +6,8 @@ use inquire::{InquireError, Select};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use similar::{ChangeTag, TextDiff};
 use std::env;
-use std::error::Error;
-use std::fmt;
-use std::fs;
+use std::fmt::{self};
+use std::fs::{self};
 use std::path::Path;
 use std::path::PathBuf;
 use walkdir::WalkDir;
@@ -25,7 +24,10 @@ fn main() {
         Err(err) => graceful_panic(err),
     };
 
-    let search_results = run_search(&args).unwrap();
+    let search_results = match run_search(&args) {
+        Ok(search_results) => search_results,
+        Err(_) => todo!(),
+    };
 
     let file_matches = &search_results.to_string();
     let mut grid_options: Vec<_> = file_matches.split('\n').collect();
@@ -255,34 +257,59 @@ fn get_piped_input() -> Result<String, String> {
     Ok(piped_input)
 }
 
-fn run_search(args: &Args) -> Result<FileMatches, Box<dyn Error>> {
-    let search_root = args
-        .search_path
-        .clone()
-        .into_os_string()
-        .into_string()
-        .unwrap();
+#[derive(Debug)]
+enum SearchErr {
+    // (TemplateError),
+}
 
+fn run_search(args: &Args) -> Result<FileMatches, SearchErr> {
     // Create progress bar style
-    let progress_bar_style = ProgressStyle::with_template(
+    let progress_bar_style_result = ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
-        )
-        .unwrap()
-        .progress_chars("#>-");
+        );
 
     let now = std::time::Instant::now();
 
-    // Walk through search path
-    let mut file_match_vec: Vec<FileMatch> = WalkDir::new(search_root)
+    let walkdir_vec = WalkDir::new(&args.search_path)
         .into_iter()
-        .collect::<Vec<_>>()
-        .par_iter()
-        .progress_with_style(progress_bar_style)
-        .filter_map(|dir_entry_result| match dir_entry_result {
-            Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
-            Err(_) => None,
-        })
-        .collect();
+        .collect::<Vec<_>>();
+
+    let mut file_match_vec: Vec<FileMatch> = match progress_bar_style_result {
+        Ok(progress_bar_style) => {
+            // println!("GOOD!");
+            walkdir_vec
+                .par_iter()
+                .progress_with_style(progress_bar_style.progress_chars("#>-"))
+                .filter_map(|dir_entry_result| match dir_entry_result {
+                    Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+                    Err(_) => None,
+                })
+                .collect()
+        }
+
+        Err(_) => {
+            println!("The progress bar could not be configured.");
+            walkdir_vec
+                .par_iter()
+                .filter_map(|dir_entry_result| match dir_entry_result {
+                    Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+                    Err(_) => None,
+                })
+                .collect()
+        }
+    };
+
+    // // Walk through search path
+    // let mut file_match_vec: Vec<FileMatch> = WalkDir::new(&args.search_path)
+    //     .into_iter()
+    //     .collect::<Vec<_>>()
+    //     .par_iter()
+    //     .progress_with_style(progress_bar_style)
+    //     .filter_map(|dir_entry_result| match dir_entry_result {
+    //         Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+    //         Err(_) => None,
+    //     })
+    //     .collect();
 
     // Sort by percent match
     file_match_vec.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
