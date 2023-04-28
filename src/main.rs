@@ -6,10 +6,9 @@ use inquire::{InquireError, Select};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use similar::{ChangeTag, TextDiff};
 use std::env;
-use std::fmt::{self};
-use std::fs::{self};
-use std::path::Path;
-use std::path::PathBuf;
+use std::fmt;
+use std::fs;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 /// Output error to the std err and exit with status code 1.
