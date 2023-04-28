@@ -268,27 +268,24 @@ fn run_search(args: &Args) -> Result<FileMatches, SearchErr> {
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
         );
 
-    let now = std::time::Instant::now();
-
     let walkdir_vec = WalkDir::new(&args.search_path)
         .into_iter()
         .collect::<Vec<_>>();
 
     let mut file_match_vec: Vec<FileMatch> = match progress_bar_style_result {
-        Ok(progress_bar_style) => {
-            // println!("GOOD!");
-            walkdir_vec
-                .par_iter()
-                .progress_with_style(progress_bar_style.progress_chars("#>-"))
-                .filter_map(|dir_entry_result| match dir_entry_result {
-                    Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
-                    Err(_) => None,
-                })
-                .collect()
-        }
+        Ok(progress_bar_style) => walkdir_vec
+            .par_iter()
+            .progress_with_style(progress_bar_style.progress_chars("#>-"))
+            .filter_map(|dir_entry_result| match dir_entry_result {
+                Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+                Err(_) => None,
+            })
+            .collect(),
 
         Err(_) => {
-            println!("The progress bar could not be configured.");
+            println!(
+                "The progress bar could not be configured. Launching search without feedback. Comparing {} files...", walkdir_vec.len()
+            );
             walkdir_vec
                 .par_iter()
                 .filter_map(|dir_entry_result| match dir_entry_result {
@@ -299,25 +296,11 @@ fn run_search(args: &Args) -> Result<FileMatches, SearchErr> {
         }
     };
 
-    // // Walk through search path
-    // let mut file_match_vec: Vec<FileMatch> = WalkDir::new(&args.search_path)
-    //     .into_iter()
-    //     .collect::<Vec<_>>()
-    //     .par_iter()
-    //     .progress_with_style(progress_bar_style)
-    //     .filter_map(|dir_entry_result| match dir_entry_result {
-    //         Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
-    //         Err(_) => None,
-    //     })
-    //     .collect();
-
     // Sort by percent match
     file_match_vec.sort_by(|a, b| b.perc_shared.partial_cmp(&a.perc_shared).unwrap());
 
     // Keep the top matches
     file_match_vec.truncate(args.count.into());
-
-    println!("Elapsed: {:.2?}", now.elapsed());
 
     Ok(busca::FileMatches(file_match_vec))
 }
