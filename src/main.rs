@@ -12,7 +12,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
-fn graceful_panic(error_str: String) -> ! {
+/// Output error to the std err and exit with status code 1.
+fn graceful_panic(error_str: &str) -> ! {
     eprintln!("{}", error_str);
     std::process::exit(1);
 }
@@ -21,7 +22,7 @@ fn main() {
 
     let args = match input_args.into_args() {
         Ok(args) => args,
-        Err(err) => graceful_panic(err),
+        Err(err_str) => graceful_panic(&err_str),
     };
 
     let search_results = match run_search(&args) {
@@ -43,14 +44,14 @@ fn main() {
     let ans = match Select::new("Select a file to compare:", grid_options).raw_prompt() {
         Ok(answer) => answer,
         Err(InquireError::OperationCanceled) => std::process::exit(0),
-        Err(err) => graceful_panic(err.to_string()),
+        Err(err) => graceful_panic(&err.to_string()),
     };
 
     let selected_search = &search_results[ans.index];
     let selected_search_path = &selected_search.path;
     let comp_lines = match fs::read_to_string(selected_search_path) {
         Ok(comp_lines) => comp_lines,
-        Err(e) => graceful_panic(e.to_string()),
+        Err(err) => graceful_panic(&err.to_string()),
     };
     output_detailed_diff(&args.reference_string, &comp_lines);
 }
@@ -268,12 +269,7 @@ fn get_piped_input() -> Result<String, String> {
     Ok(piped_input)
 }
 
-#[derive(Debug)]
-enum SearchErr {
-    // (TemplateError),
-}
-
-fn run_search(args: &Args) -> Result<FileMatches, SearchErr> {
+fn run_search(args: &Args) -> Result<FileMatches, String> {
     // Create progress bar style
     let progress_bar_style_result = ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
