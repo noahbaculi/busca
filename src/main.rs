@@ -59,9 +59,13 @@ fn main() {
 /// directory based on the number of lines in the reference file that exist in
 /// each compared file.
 #[derive(Parser, Debug)]
-#[command(author="Noah Baculi", version, about, long_about = None)]
+#[command(author="Noah Baculi", version, about, long_about = None, override_usage="\
+    busca --ref-file-path <REF_FILE_PATH> [OPTIONS]\n       \
+    <SomeCommand> | busca [OPTIONS]"
+)]
 struct InputArgs {
-    /// Local or absolute path to the reference comparison file
+    /// Local or absolute path to the reference comparison file. Overrides any
+    /// piped input
     #[arg(short, long)]
     ref_file_path: Option<PathBuf>,
 
@@ -78,6 +82,14 @@ struct InputArgs {
     /// lines will be skipped.
     #[arg(short, long, default_value_t = 10_000)]
     max_lines: u32,
+
+    /// Substrings in search paths that qualifies that file for comparison
+    #[arg(long)]
+    include: Option<Vec<String>>,
+
+    /// Substrings in search paths that disqualifies that file from comparison
+    #[arg(long)]
+    exclude: Option<Vec<String>>,
 
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
