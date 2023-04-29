@@ -40,6 +40,7 @@ fn main() {
 
     if !interactive_input_mode() {
         println!("{}", file_matches);
+        println!("\nNote: Interactive prompt is not supported in this mode.");
         return;
     }
 
