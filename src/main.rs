@@ -38,6 +38,11 @@ fn main() {
         std::process::exit(0);
     }
 
+    if !interactive_input_mode() {
+        println!("{}", file_matches);
+        return;
+    }
+
     let ans = match Select::new("Select a file to compare:", grid_options)
         .with_page_size(10)
         .raw_prompt()
@@ -289,8 +294,7 @@ mod test_input_args_validation {
 fn get_piped_input() -> Result<String, String> {
     use std::io::{self, BufRead};
 
-    // If the current stdin is a TTY (interactive)
-    if atty::is(atty::Stream::Stdin) {
+    if interactive_input_mode() {
         return Err("No piped input was received.".to_owned());
     }
 
@@ -306,6 +310,11 @@ fn get_piped_input() -> Result<String, String> {
     }
 
     Ok(piped_input)
+}
+
+/// If the current stdin is a TTY (interactive)
+fn interactive_input_mode() -> bool {
+    atty::is(atty::Stream::Stdin)
 }
 
 fn run_search(args: &Args) -> Result<FileMatches, String> {
