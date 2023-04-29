@@ -630,7 +630,14 @@ mod test_compare_file {
 fn output_detailed_diff(ref_lines: &str, comp_lines: &str) {
     let diff = TextDiff::from_lines(ref_lines, comp_lines);
 
-    for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
+    let grouped_operations = diff.grouped_ops(3);
+
+    if grouped_operations.is_empty() {
+        println!("The comparables are identical.");
+        return;
+    }
+
+    for (idx, group) in grouped_operations.iter().enumerate() {
         if idx > 0 {
             println!("{:-^1$}", "-", 80);
         }
