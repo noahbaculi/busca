@@ -38,6 +38,12 @@ fn main() {
         std::process::exit(0);
     }
 
+    if !interactive_input_mode() {
+        println!("{}", file_matches);
+        println!("\nNote: Interactive prompt is not supported in this mode.");
+        return;
+    }
+
     let ans = match Select::new("Select a file to compare:", grid_options)
         .with_page_size(10)
         .raw_prompt()
@@ -56,9 +62,8 @@ fn main() {
     output_detailed_diff(&args.reference_string, &comp_lines);
 }
 
-/// Simple utility to find the closest matches to a reference file in a
-/// directory based on the number of lines in the reference file that exist in
-/// each compared file.
+/// Simple utility to find the closest matches to a reference file or piped input
+/// based on the number of lines in the reference that exist in each compared file.
 #[derive(Parser, Debug)]
 #[command(author="Noah Baculi", version, about, long_about = None, override_usage="\
     busca --ref-file-path <REF_FILE_PATH> [OPTIONS]\n       \
@@ -289,9 +294,8 @@ mod test_input_args_validation {
 fn get_piped_input() -> Result<String, String> {
     use std::io::{self, BufRead};
 
-    // If the current stdin is a TTY (interactive)
-    if atty::is(atty::Stream::Stdin) {
-        return Err("No piped input was received.".to_owned());
+    if interactive_input_mode() {
+        return Err("No piped input was received. For more information, try '--help'.".to_owned());
     }
 
     let piped_input: String = io::stdin()
@@ -302,10 +306,15 @@ fn get_piped_input() -> Result<String, String> {
         .join("\n");
 
     if piped_input.is_empty() {
-        return Err("No piped input was received.".to_owned());
+        return Err("No piped input was received. For more information, try '--help'.".to_owned());
     }
 
     Ok(piped_input)
+}
+
+/// If the current stdin is a TTY (interactive)
+fn interactive_input_mode() -> bool {
+    atty::is(atty::Stream::Stdin)
 }
 
 fn run_search(args: &Args) -> Result<FileMatches, String> {
@@ -630,7 +639,14 @@ mod test_compare_file {
 fn output_detailed_diff(ref_lines: &str, comp_lines: &str) {
     let diff = TextDiff::from_lines(ref_lines, comp_lines);
 
-    for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
+    let grouped_operations = diff.grouped_ops(3);
+
+    if grouped_operations.is_empty() {
+        println!("The comparables are identical.");
+        return;
+    }
+
+    for (idx, group) in grouped_operations.iter().enumerate() {
         if idx > 0 {
             println!("{:-^1$}", "-", 80);
         }
