@@ -143,6 +143,7 @@ brew install busca
 To update, run
 
 ```shell
+brew update
 brew upgrade busca
 ```
 
