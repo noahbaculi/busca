@@ -6,15 +6,15 @@ Simple utility to find the closest matches to a reference file in a directory ba
 
 ## Usage
 
-### Demo
-
-![Demo GIF](documentation/Demo Recording.gif)
-
 To see usage documentation, run
 
 ```shell
 busca -h
 ```
+
+### Demo
+
+https://user-images.githubusercontent.com/49008873/235590754-efdeb134-feb1-44ec-bbac-44ccb737261a.mov
 
 ### MacOS
 
