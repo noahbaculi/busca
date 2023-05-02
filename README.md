@@ -1,5 +1,8 @@
 # busca
 
+
+![Busca](documentation/busca logo.png)
+
 [![Build](https://github.com/noahbaculi/busca/actions/workflows/rust.yml/badge.svg?branch=main&event=push)](https://github.com/noahbaculi/busca/actions/workflows/rust.yml)
 
 Simple interactive utility to find the closest matches to a reference file in a directory based on the number of lines in the reference file that exist in each compared file.
@@ -115,10 +118,10 @@ This can be worked around by adding the following aliases to your shell `.bashrc
 
 One-liners to add the wrapper function:
 
-| Shell | Command |
-| --- | ---|
-| Bash | `echo -e 'busca_cmd_output() {\n\teval "$* > /tmp/busca_search.tmp" && busca -r /tmp/busca_search.tmp\n}' >> ~/.bashrc` |
-| Zsh | `echo -e 'busca_cmd_output() {\n\teval "$* > /tmp/busca_search.tmp" && busca -r /tmp/busca_search.tmp\n}' >> ~/.zshrc` |
+| Shell | Command                                                                                                                 |
+| ----- | ----------------------------------------------------------------------------------------------------------------------- |
+| Bash  | `echo -e 'busca_cmd_output() {\n\teval "$* > /tmp/busca_search.tmp" && busca -r /tmp/busca_search.tmp\n}' >> ~/.bashrc` |
+| Zsh   | `echo -e 'busca_cmd_output() {\n\teval "$* > /tmp/busca_search.tmp" && busca -r /tmp/busca_search.tmp\n}' >> ~/.zshrc`  |
 
 Reload your shell for the function to become available:
 
