@@ -62,9 +62,8 @@ fn main() {
     output_detailed_diff(&args.reference_string, &comp_lines);
 }
 
-/// Simple utility to find the closest matches to a reference file in a
-/// directory based on the number of lines in the reference file that exist in
-/// each compared file.
+/// Simple utility to find the closest matches to a reference file or piped input
+/// based on the number of lines in the reference that exist in each compared file.
 #[derive(Parser, Debug)]
 #[command(author="Noah Baculi", version, about, long_about = None, override_usage="\
     busca --ref-file-path <REF_FILE_PATH> [OPTIONS]\n       \
@@ -296,7 +295,7 @@ fn get_piped_input() -> Result<String, String> {
     use std::io::{self, BufRead};
 
     if interactive_input_mode() {
-        return Err("No piped input was received.".to_owned());
+        return Err("No piped input was received. For more information, try '--help'.".to_owned());
     }
 
     let piped_input: String = io::stdin()
@@ -307,7 +306,7 @@ fn get_piped_input() -> Result<String, String> {
         .join("\n");
 
     if piped_input.is_empty() {
-        return Err("No piped input was received.".to_owned());
+        return Err("No piped input was received. For more information, try '--help'.".to_owned());
     }
 
     Ok(piped_input)
