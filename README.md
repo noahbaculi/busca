@@ -1,9 +1,8 @@
 # busca
 
-
-![Busca](documentation/busca logo.png)
-
 [![Build](https://github.com/noahbaculi/busca/actions/workflows/rust.yml/badge.svg?branch=main&event=push)](https://github.com/noahbaculi/busca/actions/workflows/rust.yml)
+
+<img src="https://user-images.githubusercontent.com/49008873/235764259-078d5bfc-e4ec-441c-9178-13c3b41a1fe2.png" alt="busca logo" width="200">
 
 Simple interactive utility to find the closest matches to a reference file in a directory based on the number of lines in the reference file that exist in each compared file.
 
