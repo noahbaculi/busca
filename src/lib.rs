@@ -1,7 +1,11 @@
+use glob::Pattern;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use similar::{ChangeTag, TextDiff};
 use std::fmt;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
+use walkdir::WalkDir;
 
 /// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
 ///
@@ -68,6 +72,16 @@ pub fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> usize {
         .count();
 
     num_shared_lines
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Args {
+    pub reference_string: String,
+    pub search_path: PathBuf,
+    pub max_lines: u32,
+    pub include_patterns: Option<Vec<Pattern>>,
+    pub exclude_patterns: Option<Vec<Pattern>>,
+    pub count: u8,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -165,12 +179,275 @@ impl fmt::Display for FileMatches {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use std::{path::PathBuf, str::FromStr};
+pub fn run_search(args: &Args) -> Result<FileMatches, String> {
+    let walkdir_vec = WalkDir::new(&args.search_path)
+        .into_iter()
+        .collect::<Vec<_>>();
 
-//     #[test]
-//     fn test_drafter() {
-//         // Space to draft test with syntax highlighting and rust-analyzer
-//     }
-// }
+    let mut file_match_vec: Vec<FileMatch> = walkdir_vec
+        .par_iter()
+        .filter_map(|dir_entry_result| match dir_entry_result {
+            Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+            Err(_) => None,
+        })
+        .collect();
+
+    // Sort by percent match
+    file_match_vec.sort_by(|a, b| {
+        b.perc_shared
+            .partial_cmp(&a.perc_shared)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Keep the top matches
+    file_match_vec.truncate(args.count.into());
+
+    Ok(FileMatches(file_match_vec))
+}
+#[cfg(test)]
+mod test_run_search {
+    use super::*;
+
+    fn get_valid_args() -> Args {
+        Args {
+            reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
+                .unwrap(),
+            search_path: PathBuf::from("sample_dir_hello_world"),
+            max_lines: 5000,
+            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
+            count: 2,
+        }
+    }
+
+    #[test]
+    fn normal_search() {
+        let valid_args = get_valid_args();
+
+        let expected = FileMatches(vec![
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
+                perc_shared: 1.0,
+            },
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/file_1.py"),
+                perc_shared: 0.14814815,
+            },
+        ]);
+        assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
+
+    #[test]
+    fn include_glob() {
+        let mut valid_args = get_valid_args();
+        valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+
+        let expected = FileMatches(vec![FileMatch {
+            path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
+            perc_shared: 0.0,
+        }]);
+        assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
+
+    #[test]
+    fn exclude_glob() {
+        let mut valid_args = get_valid_args();
+        valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+
+        let expected = FileMatches(vec![
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
+                perc_shared: 1.0,
+            },
+            FileMatch {
+                path: PathBuf::from("sample_dir_hello_world/file_1.py"),
+                perc_shared: 0.14814815,
+            },
+        ]);
+        assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
+}
+
+pub fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMatch> {
+    // Skip paths that are not files
+    if !comp_path.is_file() {
+        return None;
+    }
+
+    // Skip paths that do not contain the include glob pattern
+    match &args.include_patterns {
+        Some(include_pattern_vec) => {
+            let contains_glob_pattern = include_pattern_vec
+                .iter()
+                .any(|include_pattern| include_pattern.matches_path(comp_path));
+
+            if !contains_glob_pattern {
+                return None;
+            }
+        }
+        None => {}
+    };
+
+    // Skip paths that contain the exclude glob pattern
+    match &args.exclude_patterns {
+        Some(exclude_pattern_vec) => {
+            let contains_glob_pattern = exclude_pattern_vec
+                .iter()
+                .any(|include_pattern| include_pattern.matches_path(comp_path));
+
+            if contains_glob_pattern {
+                return None;
+            }
+        }
+        None => (),
+    };
+
+    let comp_reader = fs::read_to_string(comp_path);
+    let comp_lines = match comp_reader {
+        Ok(lines) => lines,
+        Err(error) => match error.kind() {
+            std::io::ErrorKind::InvalidData => return None,
+            other_error => panic!("{:?}", other_error),
+        },
+    };
+
+    let num_comp_lines = comp_lines.lines().count();
+    if (num_comp_lines > args.max_lines as usize) | (num_comp_lines == 0) {
+        return None;
+    }
+
+    let perc_shared = get_perc_shared_lines(ref_lines, &comp_lines);
+
+    Some(FileMatch {
+        path: PathBuf::from(comp_path),
+        perc_shared,
+    })
+}
+#[cfg(test)]
+mod test_compare_file {
+    use super::*;
+
+    fn get_valid_args() -> Args {
+        Args {
+            reference_string: fs::read_to_string("sample_dir_hello_world/file_2.py").unwrap(),
+            search_path: PathBuf::from("sample_dir_hello_world"),
+            max_lines: 5000,
+            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
+            count: 8,
+        }
+    }
+
+    #[test]
+    fn skip_directory() {
+        let valid_args = get_valid_args();
+
+        let ref_lines =
+            fs::read_to_string("sample_dir_hello_world/nested_dir/sample_python_file_3.py")
+                .unwrap();
+
+        let dir_entry_result = WalkDir::new("sample_dir_hello_world")
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
+
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
+
+        assert_eq!(file_comparison, None);
+    }
+
+    #[test]
+    fn same_file_comparison() {
+        let valid_args = get_valid_args();
+
+        let file_path_str = "sample_dir_hello_world/nested_dir/sample_python_file_3.py";
+
+        let ref_lines = fs::read_to_string(file_path_str).unwrap();
+
+        let dir_entry_result = WalkDir::new(file_path_str)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
+
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
+
+        assert_eq!(
+            file_comparison,
+            Some(FileMatch {
+                path: PathBuf::from(file_path_str),
+                perc_shared: 1.0
+            })
+        );
+    }
+
+    #[test]
+    fn normal_file_comp() {
+        let valid_args = get_valid_args();
+
+        let ref_lines = fs::read_to_string(PathBuf::from(
+            "sample_dir_hello_world/nested_dir/sample_python_file_3.py",
+        ))
+        .unwrap();
+
+        let comp_path_str = "sample_dir_hello_world/file_1.py";
+
+        let dir_entry_result = WalkDir::new(comp_path_str)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
+
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
+
+        assert_eq!(
+            file_comparison,
+            Some(FileMatch {
+                path: PathBuf::from(comp_path_str),
+                perc_shared: 0.6
+            })
+        );
+    }
+
+    #[test]
+    fn include_glob() {
+        let mut valid_args = get_valid_args();
+        valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+
+        let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
+
+        let dir_entry_result = WalkDir::new(comp_path_str)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
+
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, "");
+
+        assert_eq!(
+            file_comparison,
+            Some(FileMatch {
+                path: PathBuf::from(comp_path_str),
+                perc_shared: 0.0
+            })
+        );
+    }
+    #[test]
+    fn exclude_glob() {
+        let mut valid_args = get_valid_args();
+        valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+
+        let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
+
+        let dir_entry_result = WalkDir::new(comp_path_str)
+            .into_iter()
+            .next()
+            .unwrap()
+            .unwrap();
+
+        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, "");
+
+        assert_eq!(file_comparison, None);
+    }
+}

@@ -1,4 +1,4 @@
-use busca::{FileMatch, FileMatches};
+use busca::{compare_file, Args, FileMatch, FileMatches};
 use clap::Parser;
 use console::{style, Style};
 use glob::Pattern;
@@ -9,7 +9,7 @@ use similar::{ChangeTag, TextDiff};
 use std::env;
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use walkdir::WalkDir;
 
 /// Output error to the std err and exit with status code 1.
@@ -17,6 +17,7 @@ fn graceful_panic(error_str: &str) -> ! {
     eprintln!("{}", error_str);
     std::process::exit(1);
 }
+
 fn main() {
     let input_args = InputArgs::parse();
 
@@ -25,7 +26,7 @@ fn main() {
         Err(err_str) => graceful_panic(&err_str),
     };
 
-    let search_results = match run_search(&args) {
+    let search_results = match cli_run_search(&args) {
         Ok(search_results) => search_results,
         Err(_) => todo!(),
     };
@@ -94,16 +95,6 @@ struct InputArgs {
 
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
-    count: u8,
-}
-
-#[derive(Debug, PartialEq)]
-struct Args {
-    reference_string: String,
-    search_path: PathBuf,
-    max_lines: u32,
-    include_patterns: Option<Vec<Pattern>>,
-    exclude_patterns: Option<Vec<Pattern>>,
     count: u8,
 }
 
@@ -304,7 +295,7 @@ fn interactive_input_mode() -> bool {
     atty::is(atty::Stream::Stdin)
 }
 
-fn run_search(args: &Args) -> Result<FileMatches, String> {
+fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
     // Create progress bar style
     let progress_bar_style_result = ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
@@ -350,7 +341,6 @@ fn run_search(args: &Args) -> Result<FileMatches, String> {
 
     Ok(busca::FileMatches(file_match_vec))
 }
-
 #[cfg(test)]
 mod test_run_search {
     use super::*;
@@ -381,7 +371,7 @@ mod test_run_search {
                 perc_shared: 0.14814815,
             },
         ]);
-        assert_eq!(run_search(&valid_args).unwrap(), expected);
+        assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
 
     #[test]
@@ -393,7 +383,7 @@ mod test_run_search {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
             perc_shared: 0.0,
         }]);
-        assert_eq!(run_search(&valid_args).unwrap(), expected);
+        assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
 
     #[test]
@@ -411,191 +401,7 @@ mod test_run_search {
                 perc_shared: 0.14814815,
             },
         ]);
-        assert_eq!(run_search(&valid_args).unwrap(), expected);
-    }
-}
-
-fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMatch> {
-    // Skip paths that are not files
-    if !comp_path.is_file() {
-        return None;
-    }
-
-    // Skip paths that do not contain the include glob pattern
-    match &args.include_patterns {
-        Some(include_pattern_vec) => {
-            let contains_glob_pattern = include_pattern_vec
-                .iter()
-                .any(|include_pattern| include_pattern.matches_path(comp_path));
-
-            if !contains_glob_pattern {
-                return None;
-            }
-        }
-        None => {}
-    };
-
-    // Skip paths that contain the exclude glob pattern
-    match &args.exclude_patterns {
-        Some(exclude_pattern_vec) => {
-            let contains_glob_pattern = exclude_pattern_vec
-                .iter()
-                .any(|include_pattern| include_pattern.matches_path(comp_path));
-
-            if contains_glob_pattern {
-                return None;
-            }
-        }
-        None => (),
-    };
-
-    let comp_reader = fs::read_to_string(comp_path);
-    let comp_lines = match comp_reader {
-        Ok(lines) => lines,
-        Err(error) => match error.kind() {
-            std::io::ErrorKind::InvalidData => return None,
-            other_error => panic!("{:?}", other_error),
-        },
-    };
-
-    let num_comp_lines = comp_lines.lines().count();
-    if (num_comp_lines > args.max_lines as usize) | (num_comp_lines == 0) {
-        return None;
-    }
-
-    let perc_shared = busca::get_perc_shared_lines(ref_lines, &comp_lines);
-
-    Some(FileMatch {
-        path: PathBuf::from(comp_path),
-        perc_shared,
-    })
-}
-#[cfg(test)]
-mod test_compare_file {
-    use super::*;
-
-    fn get_valid_args() -> Args {
-        Args {
-            reference_string: fs::read_to_string("sample_dir_hello_world/file_2.py").unwrap(),
-            search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: 5000,
-            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
-            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
-            count: 8,
-        }
-    }
-
-    #[test]
-    fn skip_directory() {
-        let valid_args = get_valid_args();
-
-        let ref_lines =
-            fs::read_to_string("sample_dir_hello_world/nested_dir/sample_python_file_3.py")
-                .unwrap();
-
-        let dir_entry_result = WalkDir::new("sample_dir_hello_world")
-            .into_iter()
-            .next()
-            .unwrap()
-            .unwrap();
-
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
-
-        assert_eq!(file_comparison, None);
-    }
-
-    #[test]
-    fn same_file_comparison() {
-        let valid_args = get_valid_args();
-
-        let file_path_str = "sample_dir_hello_world/nested_dir/sample_python_file_3.py";
-
-        let ref_lines = fs::read_to_string(file_path_str).unwrap();
-
-        let dir_entry_result = WalkDir::new(file_path_str)
-            .into_iter()
-            .next()
-            .unwrap()
-            .unwrap();
-
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
-
-        assert_eq!(
-            file_comparison,
-            Some(FileMatch {
-                path: PathBuf::from(file_path_str),
-                perc_shared: 1.0
-            })
-        );
-    }
-
-    #[test]
-    fn normal_file_comp() {
-        let valid_args = get_valid_args();
-
-        let ref_lines = fs::read_to_string(PathBuf::from(
-            "sample_dir_hello_world/nested_dir/sample_python_file_3.py",
-        ))
-        .unwrap();
-
-        let comp_path_str = "sample_dir_hello_world/file_1.py";
-
-        let dir_entry_result = WalkDir::new(comp_path_str)
-            .into_iter()
-            .next()
-            .unwrap()
-            .unwrap();
-
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
-
-        assert_eq!(
-            file_comparison,
-            Some(FileMatch {
-                path: PathBuf::from(comp_path_str),
-                perc_shared: 0.6
-            })
-        );
-    }
-
-    #[test]
-    fn include_glob() {
-        let mut valid_args = get_valid_args();
-        valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
-
-        let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
-
-        let dir_entry_result = WalkDir::new(comp_path_str)
-            .into_iter()
-            .next()
-            .unwrap()
-            .unwrap();
-
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, "");
-
-        assert_eq!(
-            file_comparison,
-            Some(FileMatch {
-                path: PathBuf::from(comp_path_str),
-                perc_shared: 0.0
-            })
-        );
-    }
-    #[test]
-    fn exclude_glob() {
-        let mut valid_args = get_valid_args();
-        valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
-
-        let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
-
-        let dir_entry_result = WalkDir::new(comp_path_str)
-            .into_iter()
-            .next()
-            .unwrap()
-            .unwrap();
-
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, "");
-
-        assert_eq!(file_comparison, None);
+        assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
 }
 
