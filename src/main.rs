@@ -95,10 +95,6 @@ struct InputArgs {
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
     count: u8,
-
-    /// Print all files being considered for comparison
-    #[arg(long)]
-    verbose: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -109,7 +105,6 @@ struct Args {
     include_patterns: Option<Vec<Pattern>>,
     exclude_patterns: Option<Vec<Pattern>>,
     count: u8,
-    verbose: bool,
 }
 
 impl InputArgs {
@@ -179,7 +174,6 @@ impl InputArgs {
             include_patterns,
             exclude_patterns,
             count: self.count,
-            verbose: self.verbose,
         })
     }
 }
@@ -196,7 +190,6 @@ mod test_input_args_validation {
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: 8,
-            verbose: false,
         }
     }
 
@@ -212,7 +205,6 @@ mod test_input_args_validation {
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count,
-            verbose: valid_args.verbose,
         };
         assert_eq!(
             input_args.into_args(),
@@ -223,7 +215,6 @@ mod test_input_args_validation {
                 include_patterns: valid_args.include_patterns.clone(),
                 exclude_patterns: valid_args.exclude_patterns.clone(),
                 count: valid_args.count,
-                verbose: valid_args.verbose,
             })
         );
     }
@@ -238,7 +229,6 @@ mod test_input_args_validation {
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count,
-            verbose: valid_args.verbose,
         };
         assert_eq!(
             input_args.into_args(),
@@ -249,7 +239,6 @@ mod test_input_args_validation {
                 include_patterns: valid_args.include_patterns.clone(),
                 exclude_patterns: valid_args.exclude_patterns.clone(),
                 count: valid_args.count,
-                verbose: valid_args.verbose,
             })
         );
     }
@@ -264,7 +253,6 @@ mod test_input_args_validation {
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count,
-            verbose: valid_args.verbose,
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
@@ -282,7 +270,6 @@ mod test_input_args_validation {
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count,
-            verbose: valid_args.verbose,
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
@@ -377,7 +364,6 @@ mod test_run_search {
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: 2,
-            verbose: false,
         }
     }
 
@@ -430,15 +416,8 @@ mod test_run_search {
 }
 
 fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMatch> {
-    if args.verbose {
-        print!("{}", &comp_path.display());
-    }
-
     // Skip paths that are not files
     if !comp_path.is_file() {
-        if args.verbose {
-            println!(" | skipped since it is not a file.");
-        }
         return None;
     }
 
@@ -450,9 +429,6 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
                 .any(|include_pattern| include_pattern.matches_path(comp_path));
 
             if !contains_glob_pattern {
-                if args.verbose {
-                    println!(" | skipped since it does not contain the include glob pattern.");
-                }
                 return None;
             }
         }
@@ -467,9 +443,6 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
                 .any(|include_pattern| include_pattern.matches_path(comp_path));
 
             if contains_glob_pattern {
-                if args.verbose {
-                    println!(" | skipped since it contains the exclude glob pattern.");
-                }
                 return None;
             }
         }
@@ -486,20 +459,11 @@ fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMa
     };
 
     let num_comp_lines = comp_lines.lines().count();
-
     if (num_comp_lines > args.max_lines as usize) | (num_comp_lines == 0) {
-        if args.verbose {
-            println!(" | skipped since it exceeds the maximum line limit.");
-        }
         return None;
     }
 
     let perc_shared = busca::get_perc_shared_lines(ref_lines, &comp_lines);
-
-    // Print new line after the file path print if file was compared.
-    if args.verbose {
-        println!();
-    }
 
     Some(FileMatch {
         path: PathBuf::from(comp_path),
@@ -518,7 +482,6 @@ mod test_compare_file {
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: 8,
-            verbose: false,
         }
     }
 

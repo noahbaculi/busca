@@ -33,7 +33,7 @@ Simple interactive utility to find the closest matches to a reference file in a 
 busca -h
 ```
 
-🛟 output for v1.3.3
+Output for v2.0.0
 
 ```text
 Simple utility to find the closest matches to a reference file or piped input based on the number of lines in the reference that exist in each compared file
@@ -48,7 +48,6 @@ Options:
   -i, --include-glob <INCLUDE_GLOB>    Globs that qualify a file for comparison
   -x, --exclude-glob <EXCLUDE_GLOB>    Globs that disqualify a file from comparison
   -c, --count <COUNT>                  Number of results to display [default: 10]
-      --verbose                        Print all files being considered for comparison
   -h, --help                           Print help
   -V, --version                        Print version
 ```
