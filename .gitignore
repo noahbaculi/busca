@@ -22,3 +22,6 @@ Cargo.lock
 # Comprehensive testing dir
 sample-comprehensive
 .DS_Store
+
+# Python virtual environment
+python_venv/
