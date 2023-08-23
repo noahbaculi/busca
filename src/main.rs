@@ -331,8 +331,8 @@ fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
 
     // Sort by percent match
     file_match_vec.sort_by(|a, b| {
-        b.perc_shared
-            .partial_cmp(&a.perc_shared)
+        b.percent_match
+            .partial_cmp(&a.percent_match)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
@@ -364,11 +364,13 @@ mod test_run_search {
         let expected = busca::FileMatches(vec![
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                perc_shared: 1.0,
+                percent_match: 1.0,
+                lines: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
             },
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                perc_shared: 0.14814815,
+                percent_match: 2.0 / 9.0,
+                lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
         ]);
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
@@ -381,7 +383,9 @@ mod test_run_search {
 
         let expected = busca::FileMatches(vec![FileMatch {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
-            perc_shared: 0.0,
+            percent_match: 0.0,
+            lines: fs::read_to_string("sample_dir_hello_world/nested_dir/sample_json.json")
+                .unwrap(),
         }]);
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
@@ -394,11 +398,13 @@ mod test_run_search {
         let expected = busca::FileMatches(vec![
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                perc_shared: 1.0,
+                percent_match: 1.0,
+                lines: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
             },
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                perc_shared: 0.14814815,
+                percent_match: 2.0 / 9.0,
+                lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
         ]);
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);

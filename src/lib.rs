@@ -9,37 +9,51 @@ use walkdir::WalkDir;
 
 /// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
 ///
+///
+/// # Formula
+///
+/// This is `2.0*M / T` where `M` is the number of matching lines and `T` is the total number of lines in both sequences.
+/// Note that this evaluates to `1.0` if the sequences are identical, and `0.0` if they have nothing in common.
+/// Inspiration: https://docs.python.org/3/library/difflib.html#difflib.SequenceMatcher.ratio
+///
 /// # Examples
 ///
 /// ```
-/// //                ✓   ✓  x   ✓   x      = 3 / 5 = 0.6
+/// //                ✓   ✓  x   ✓   x      = 3
 /// let ref_lines = "12\n14\n5\n17\n19\n";
 /// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_perc_shared_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 0.6);
+/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 3.0 / 7.0);
 /// ```
 /// ---
 /// ```
 /// //                ✓   ✓  x   x    = 2 / 4 = 0.5
 /// let ref_lines = "12\n14\n5\n17";
 /// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_perc_shared_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 0.5);
+/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 4.0 / 13.0);
 /// ```
 ///
-pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
-    let num_shared_lines = get_num_shared_lines(ref_lines, comp_lines);
+pub fn get_percent_matching_lines(ref_lines: &str, comp_lines: &str) -> f32 {
+    let num_matching_lines = get_num_matching_lines(ref_lines, comp_lines);
 
-    // If ref file ends with a newline, do not count it as line compared
     let mut num_ref_lines = ref_lines.split('\n').count();
     if ref_lines.ends_with('\n') {
         num_ref_lines -= 1;
     }
 
-    num_shared_lines as f32 / num_ref_lines as f32
+    let mut num_comp_lines = comp_lines.split('\n').count();
+    if comp_lines.ends_with('\n') {
+        num_comp_lines -= 1;
+    }
+
+    let total_num_lines = num_ref_lines + num_comp_lines;
+
+    // num_matching_lines as f32 / num_ref_lines as f32
+    (2 * num_matching_lines) as f32 / total_num_lines as f32
 }
 
-/// Returns the number of lines from `ref_lines` that also exist in `comp_lines`.
+/// Returns the number of lines that exist both in `ref_lines` and in `comp_lines`.
 ///
 /// Note: Final new lines are included in the diff comparisons.
 ///
@@ -49,7 +63,7 @@ pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
 /// //                ✓   ✓  x   ✓   x      = 3
 /// let ref_lines = "12\n14\n5\n17\n19\n";
 /// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_num_shared_lines(ref_lines, comp_lines);
+/// let result = busca::get_num_matching_lines(ref_lines, comp_lines);
 /// assert_eq!(result, 3);
 /// ```
 /// ---
@@ -57,21 +71,18 @@ pub fn get_perc_shared_lines(ref_lines: &str, comp_lines: &str) -> f32 {
 /// //                ✓   ✓  x   x    = 2
 /// let ref_lines = "12\n14\n5\n17";
 /// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_num_shared_lines(ref_lines, comp_lines);
+/// let result = busca::get_num_matching_lines(ref_lines, comp_lines);
 /// assert_eq!(result, 2);
 /// ```
 ///
-pub fn get_num_shared_lines(ref_lines: &str, comp_lines: &str) -> usize {
+pub fn get_num_matching_lines(ref_lines: &str, comp_lines: &str) -> usize {
     let diff = TextDiff::from_lines(ref_lines, comp_lines);
-
-    // let mut num_shared_lines = 0;
-    // Increment the number of shared lines for each equal line
-    let num_shared_lines = diff
+    let num_matching_lines = diff
         .iter_all_changes()
         .filter(|change| change.tag() == ChangeTag::Equal)
         .count();
 
-    num_shared_lines
+    num_matching_lines
 }
 
 #[derive(Debug, PartialEq)]
@@ -87,7 +98,8 @@ pub struct Args {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileMatch {
     pub path: PathBuf,
-    pub perc_shared: f32,
+    pub percent_match: f32,
+    pub lines: String,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileMatches(pub Vec<FileMatch>);
@@ -114,25 +126,30 @@ impl FileMatches {
     /// ```
     /// let file_matches = busca::FileMatches(vec![
     ///     busca::FileMatch {
-    ///         path: std::path::PathBuf::from(r"/sample-comprehensive/projects/Geocoding/geocoding.py"),
-    ///         perc_shared: 0.9846,
+    ///         path: std::path::PathBuf::from("sample-comprehensive/projects/Geocoding/geocoding.py"),
+    ///         percent_match: 0.9846,
+    ///         lines: std::fs::read_to_string("sample-comprehensive/projects/Geocoding/geocoding.py").unwrap(),
     ///     },
     ///     busca::FileMatch {
     ///         path: std::path::PathBuf::from(
-    ///             r"sample-comprehensive\\projects\\Bouncing_ball_simulator\\ball_bounce.py",
+    ///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
     ///         ),
-    ///         perc_shared: 0.3481,
+    ///         percent_match: 0.3481,
+    ///         lines: std::fs::read_to_string(
+    ///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
+    ///         ).unwrap(),
     ///     },
     ///     busca::FileMatch {
-    ///         path: std::path::PathBuf::from(r"/sample-comprehensive/projects/Geocoding/geocoding.py"),
-    ///         perc_shared: 0.0521,
+    ///         path: std::path::PathBuf::from("sample-comprehensive/projects/chatbot/bot.py"),
+    ///         percent_match: 0.0521,
+    ///         lines: std::fs::read_to_string("sample-comprehensive/projects/chatbot/bot.py").unwrap(),
     ///     },
     /// ]);
 
     /// let expected_output = "\
-    /// /sample-comprehensive/projects/Geocoding/geocoding.py                    ++++++++++  98.5%
-    /// sample-comprehensive\\\\projects\\\\Bouncing_ball_simulator\\\\ball_bounce.py  +++         34.8%
-    /// /sample-comprehensive/projects/Geocoding/geocoding.py                    +            5.2%";
+    /// sample-comprehensive/projects/Geocoding/geocoding.py                  ++++++++++  98.5%
+    /// sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py  +++         34.8%
+    /// sample-comprehensive/projects/chatbot/bot.py                          +            5.2%";
 
     /// assert_eq!(file_matches.get_formatted_string(), expected_output);
     /// ```
@@ -148,12 +165,13 @@ impl FileMatches {
             grid.add(Cell::from(path_and_perc.path.display().to_string()));
 
             // Add second column with the visual indicator of the match perc
-            let visual_indicator = "+".repeat((path_and_perc.perc_shared * 10.0).round() as usize);
+            let visual_indicator =
+                "+".repeat((path_and_perc.percent_match * 10.0).round() as usize);
             let vis_cell = Cell::from(visual_indicator);
             grid.add(vis_cell);
 
             // Add third column with the numerical match perc
-            let perc_str = format!("{:.1}%", (path_and_perc.perc_shared * 100.0));
+            let perc_str = format!("{:.1}%", (path_and_perc.percent_match * 100.0));
             let mut perc_cell = Cell::from(perc_str);
             perc_cell.alignment = Alignment::Right;
             grid.add(perc_cell);
@@ -194,8 +212,8 @@ pub fn run_search(args: &Args) -> Result<FileMatches, String> {
 
     // Sort by percent match
     file_match_vec.sort_by(|a, b| {
-        b.perc_shared
-            .partial_cmp(&a.perc_shared)
+        b.percent_match
+            .partial_cmp(&a.percent_match)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
@@ -227,11 +245,13 @@ mod test_run_search {
         let expected = FileMatches(vec![
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                perc_shared: 1.0,
+                percent_match: 1.0,
+                lines: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
             },
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                perc_shared: 0.14814815,
+                percent_match: 2.0 / 9.0,
+                lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
         ]);
         assert_eq!(run_search(&valid_args).unwrap(), expected);
@@ -244,7 +264,9 @@ mod test_run_search {
 
         let expected = FileMatches(vec![FileMatch {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
-            perc_shared: 0.0,
+            percent_match: 0.0,
+            lines: fs::read_to_string("sample_dir_hello_world/nested_dir/sample_json.json")
+                .unwrap(),
         }]);
         assert_eq!(run_search(&valid_args).unwrap(), expected);
     }
@@ -257,11 +279,13 @@ mod test_run_search {
         let expected = FileMatches(vec![
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                perc_shared: 1.0,
+                percent_match: 1.0,
+                lines: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
             },
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                perc_shared: 0.14814815,
+                percent_match: 2.0 / 9.0,
+                lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
         ]);
         assert_eq!(run_search(&valid_args).unwrap(), expected);
@@ -316,11 +340,12 @@ pub fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<Fi
         return None;
     }
 
-    let perc_shared = get_perc_shared_lines(ref_lines, &comp_lines);
+    let percent_match = get_percent_matching_lines(ref_lines, &comp_lines);
 
     Some(FileMatch {
         path: PathBuf::from(comp_path),
-        perc_shared,
+        percent_match,
+        lines: comp_lines,
     })
 }
 #[cfg(test)]
@@ -377,7 +402,8 @@ mod test_compare_file {
             file_comparison,
             Some(FileMatch {
                 path: PathBuf::from(file_path_str),
-                perc_shared: 1.0
+                percent_match: 1.0,
+                lines: ref_lines,
             })
         );
     }
@@ -386,10 +412,9 @@ mod test_compare_file {
     fn normal_file_comp() {
         let valid_args = get_valid_args();
 
-        let ref_lines = fs::read_to_string(PathBuf::from(
-            "sample_dir_hello_world/nested_dir/sample_python_file_3.py",
-        ))
-        .unwrap();
+        let ref_lines =
+            fs::read_to_string("sample_dir_hello_world/nested_dir/sample_python_file_3.py")
+                .unwrap();
 
         let comp_path_str = "sample_dir_hello_world/file_1.py";
 
@@ -405,7 +430,8 @@ mod test_compare_file {
             file_comparison,
             Some(FileMatch {
                 path: PathBuf::from(comp_path_str),
-                perc_shared: 0.6
+                percent_match: 3.0 / 7.0,
+                lines: fs::read_to_string(comp_path_str).unwrap(),
             })
         );
     }
@@ -429,10 +455,12 @@ mod test_compare_file {
             file_comparison,
             Some(FileMatch {
                 path: PathBuf::from(comp_path_str),
-                perc_shared: 0.0
+                percent_match: 0.0,
+                lines: fs::read_to_string(comp_path_str).unwrap(),
             })
         );
     }
+
     #[test]
     fn exclude_glob() {
         let mut valid_args = get_valid_args();
