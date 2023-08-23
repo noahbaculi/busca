@@ -7,84 +7,6 @@ use std::path::{Path, PathBuf};
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use walkdir::WalkDir;
 
-/// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
-///
-///
-/// # Formula
-///
-/// This is `2.0*M / T` where `M` is the number of matching lines and `T` is the total number of lines in both sequences.
-/// Note that this evaluates to `1.0` if the sequences are identical, and `0.0` if they have nothing in common.
-/// Inspiration: https://docs.python.org/3/library/difflib.html#difflib.SequenceMatcher.ratio
-///
-/// # Examples
-///
-/// ```
-/// //                ✓   ✓  x   ✓   x      = 3
-/// let ref_lines = "12\n14\n5\n17\n19\n";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 3.0 / 7.0);
-/// ```
-/// ---
-/// ```
-/// //                ✓   ✓  x   x    = 2 / 4 = 0.5
-/// let ref_lines = "12\n14\n5\n17";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 4.0 / 13.0);
-/// ```
-///
-pub fn get_percent_matching_lines(ref_lines: &str, comp_lines: &str) -> f32 {
-    let num_matching_lines = get_num_matching_lines(ref_lines, comp_lines);
-
-    let mut num_ref_lines = ref_lines.split('\n').count();
-    if ref_lines.ends_with('\n') {
-        num_ref_lines -= 1;
-    }
-
-    let mut num_comp_lines = comp_lines.split('\n').count();
-    if comp_lines.ends_with('\n') {
-        num_comp_lines -= 1;
-    }
-
-    let total_num_lines = num_ref_lines + num_comp_lines;
-
-    // num_matching_lines as f32 / num_ref_lines as f32
-    (2 * num_matching_lines) as f32 / total_num_lines as f32
-}
-
-/// Returns the number of lines that exist both in `ref_lines` and in `comp_lines`.
-///
-/// Note: Final new lines are included in the diff comparisons.
-///
-/// # Examples
-///
-/// ```
-/// //                ✓   ✓  x   ✓   x      = 3
-/// let ref_lines = "12\n14\n5\n17\n19\n";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_num_matching_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 3);
-/// ```
-/// ---
-/// ```
-/// //                ✓   ✓  x   x    = 2
-/// let ref_lines = "12\n14\n5\n17";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_num_matching_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 2);
-/// ```
-///
-pub fn get_num_matching_lines(ref_lines: &str, comp_lines: &str) -> usize {
-    let diff = TextDiff::from_lines(ref_lines, comp_lines);
-    let num_matching_lines = diff
-        .iter_all_changes()
-        .filter(|change| change.tag() == ChangeTag::Equal)
-        .count();
-
-    num_matching_lines
-}
-
 #[derive(Debug, PartialEq)]
 pub struct Args {
     pub reference_string: String,
@@ -478,4 +400,82 @@ mod test_compare_file {
 
         assert_eq!(file_comparison, None);
     }
+}
+
+/// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
+///
+///
+/// # Formula
+///
+/// This is `2.0*M / T` where `M` is the number of matching lines and `T` is the total number of lines in both sequences.
+/// Note that this evaluates to `1.0` if the sequences are identical, and `0.0` if they have nothing in common.
+/// Inspiration: https://docs.python.org/3/library/difflib.html#difflib.SequenceMatcher.ratio
+///
+/// # Examples
+///
+/// ```
+/// //                ✓   ✓  x   ✓   x      = 3
+/// let ref_lines = "12\n14\n5\n17\n19\n";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 3.0 / 7.0);
+/// ```
+/// ---
+/// ```
+/// //                ✓   ✓  x   x    = 2 / 4 = 0.5
+/// let ref_lines = "12\n14\n5\n17";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 4.0 / 13.0);
+/// ```
+///
+pub fn get_percent_matching_lines(ref_lines: &str, comp_lines: &str) -> f32 {
+    let num_matching_lines = get_num_matching_lines(ref_lines, comp_lines);
+
+    let mut num_ref_lines = ref_lines.split('\n').count();
+    if ref_lines.ends_with('\n') {
+        num_ref_lines -= 1;
+    }
+
+    let mut num_comp_lines = comp_lines.split('\n').count();
+    if comp_lines.ends_with('\n') {
+        num_comp_lines -= 1;
+    }
+
+    let total_num_lines = num_ref_lines + num_comp_lines;
+
+    // num_matching_lines as f32 / num_ref_lines as f32
+    (2 * num_matching_lines) as f32 / total_num_lines as f32
+}
+
+/// Returns the number of lines that exist both in `ref_lines` and in `comp_lines`.
+///
+/// Note: Final new lines are included in the diff comparisons.
+///
+/// # Examples
+///
+/// ```
+/// //                ✓   ✓  x   ✓   x      = 3
+/// let ref_lines = "12\n14\n5\n17\n19\n";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_num_matching_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 3);
+/// ```
+/// ---
+/// ```
+/// //                ✓   ✓  x   x    = 2
+/// let ref_lines = "12\n14\n5\n17";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_num_matching_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 2);
+/// ```
+///
+pub fn get_num_matching_lines(ref_lines: &str, comp_lines: &str) -> usize {
+    let diff = TextDiff::from_lines(ref_lines, comp_lines);
+    let num_matching_lines = diff
+        .iter_all_changes()
+        .filter(|change| change.tag() == ChangeTag::Equal)
+        .count();
+
+    num_matching_lines
 }
