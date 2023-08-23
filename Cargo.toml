@@ -26,3 +26,6 @@ rayon = "1.7.0"
 similar = { version = "2.2.1", features = ["inline"] }
 term_grid = "0.2.0"
 walkdir = "2.3.3"
+
+[build-dependencies]
+pyo3-build-config = "0.19.2"
