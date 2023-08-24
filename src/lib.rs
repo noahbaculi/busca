@@ -154,7 +154,7 @@ fn search_for_lines(
 
     let file_matches = match run_search(&args) {
         Ok(file_matches) => file_matches,
-        Err(err) => return Err(PyValueError::new_err(format!("{}", err))),
+        Err(err) => return Err(PyValueError::new_err(err)),
     };
 
     Ok(file_matches)
