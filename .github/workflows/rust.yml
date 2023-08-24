@@ -48,10 +48,5 @@ jobs:
           python -m venv ./python_venv
           source python_venv/bin/activate
           pip install -r python_requirements.txt
-          echo "VIRTUAL ENV:" $VIRTUAL_ENV
           maturin develop --release
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: develop
-          args: --release
-      - run: python python/test.py
+          python python/test.py
