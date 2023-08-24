@@ -1,44 +1,28 @@
 use glob::Pattern;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use similar::{ChangeTag, TextDiff};
+use similar::TextDiff;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use walkdir::WalkDir;
 
-/// Formats the sum of two numbers as string.
-#[pyfunction]
-fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
-    Ok((a + b).to_string())
-}
-
-/// A Python module implemented in Rust. The name of this function must match
-/// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
-/// import the module.
-#[pymodule]
-fn busca(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
-    Ok(())
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Args {
-    pub reference_string: String,
-    pub search_path: PathBuf,
-    pub max_lines: u32,
-    pub include_patterns: Option<Vec<Pattern>>,
-    pub exclude_patterns: Option<Vec<Pattern>>,
-    pub count: u8,
-}
-
+#[pyclass(get_all)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileMatch {
     pub path: PathBuf,
     pub percent_match: f32,
     pub lines: String,
 }
+#[pymethods]
+impl FileMatch {
+    fn __repr__(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileMatches(pub Vec<FileMatch>);
 
@@ -135,7 +119,74 @@ impl fmt::Display for FileMatches {
     }
 }
 
-pub fn run_search(args: &Args) -> Result<FileMatches, String> {
+/// Search for file matches in a search path.
+#[pyfunction]
+fn search_for_lines(
+    reference_string: String,
+    search_path: PathBuf,
+    max_lines: u32,
+    count: u8,
+    include_globs: Option<Vec<String>>,
+    exclude_globs: Option<Vec<String>>,
+) -> PyResult<Vec<FileMatch>> {
+    let include_patterns: Option<Vec<Pattern>> = include_globs.map(|include_substring_vec| {
+        include_substring_vec
+            .iter()
+            .map(|include_substring| parse_glob_pattern(include_substring))
+            .collect()
+    });
+
+    let exclude_patterns: Option<Vec<Pattern>> = exclude_globs.map(|exclude_substring_vec| {
+        exclude_substring_vec
+            .iter()
+            .map(|exclude_substring| parse_glob_pattern(exclude_substring))
+            .collect()
+    });
+
+    let args = Args {
+        reference_string,
+        search_path,
+        max_lines,
+        include_patterns,
+        exclude_patterns,
+        count,
+    };
+
+    let file_matches = match run_search(&args) {
+        Ok(file_matches) => file_matches,
+        Err(err) => return Err(PyValueError::new_err(format!("{}", err))),
+    };
+
+    Ok(file_matches)
+}
+
+pub fn parse_glob_pattern(pattern_string: &str) -> Pattern {
+    match glob::Pattern::new(pattern_string) {
+        Ok(pattern) => pattern,
+        Err(e) => panic!("{:?} for '{}'", e, pattern_string),
+    }
+}
+
+/// A Python module of the Rust `busca` file matching library.
+/// https://github.com/noahbaculi/busca
+#[pymodule]
+fn busca(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
+    module.add_class::<FileMatch>()?;
+    module.add_function(wrap_pyfunction!(search_for_lines, module)?)?;
+    Ok(())
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Args {
+    pub reference_string: String,
+    pub search_path: PathBuf,
+    pub max_lines: u32,
+    pub include_patterns: Option<Vec<Pattern>>,
+    pub exclude_patterns: Option<Vec<Pattern>>,
+    pub count: u8,
+}
+
+pub fn run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
     let walkdir_vec = WalkDir::new(&args.search_path)
         .into_iter()
         .collect::<Vec<_>>();
@@ -158,7 +209,7 @@ pub fn run_search(args: &Args) -> Result<FileMatches, String> {
     // Keep the top matches
     file_match_vec.truncate(args.count.into());
 
-    Ok(FileMatches(file_match_vec))
+    Ok(file_match_vec)
 }
 #[cfg(test)]
 mod test_run_search {
@@ -180,7 +231,7 @@ mod test_run_search {
     fn normal_search() {
         let valid_args = get_valid_args();
 
-        let expected = FileMatches(vec![
+        let expected = vec![
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
                 percent_match: 1.0,
@@ -191,7 +242,7 @@ mod test_run_search {
                 percent_match: 2.0 / 9.0,
                 lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
-        ]);
+        ];
         assert_eq!(run_search(&valid_args).unwrap(), expected);
     }
 
@@ -200,12 +251,12 @@ mod test_run_search {
         let mut valid_args = get_valid_args();
         valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
 
-        let expected = FileMatches(vec![FileMatch {
+        let expected = vec![FileMatch {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
             percent_match: 0.0,
             lines: fs::read_to_string("sample_dir_hello_world/nested_dir/sample_json.json")
                 .unwrap(),
-        }]);
+        }];
         assert_eq!(run_search(&valid_args).unwrap(), expected);
     }
 
@@ -214,7 +265,7 @@ mod test_run_search {
         let mut valid_args = get_valid_args();
         valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
 
-        let expected = FileMatches(vec![
+        let expected = vec![
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
                 percent_match: 1.0,
@@ -225,7 +276,7 @@ mod test_run_search {
                 percent_match: 2.0 / 9.0,
                 lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
-        ]);
+        ];
         assert_eq!(run_search(&valid_args).unwrap(), expected);
     }
 }
@@ -421,12 +472,6 @@ mod test_compare_file {
 /// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
 ///
 ///
-/// # Formula
-///
-/// This is `2.0*M / T` where `M` is the number of matching lines and `T` is the total number of lines in both sequences.
-/// Note that this evaluates to `1.0` if the sequences are identical, and `0.0` if they have nothing in common.
-/// Inspiration: https://docs.python.org/3/library/difflib.html#difflib.SequenceMatcher.ratio
-///
 /// # Examples
 ///
 /// ```
@@ -446,52 +491,6 @@ mod test_compare_file {
 /// ```
 ///
 pub fn get_percent_matching_lines(ref_lines: &str, comp_lines: &str) -> f32 {
-    let num_matching_lines = get_num_matching_lines(ref_lines, comp_lines);
-
-    let mut num_ref_lines = ref_lines.split('\n').count();
-    if ref_lines.ends_with('\n') {
-        num_ref_lines -= 1;
-    }
-
-    let mut num_comp_lines = comp_lines.split('\n').count();
-    if comp_lines.ends_with('\n') {
-        num_comp_lines -= 1;
-    }
-
-    let total_num_lines = num_ref_lines + num_comp_lines;
-
-    // num_matching_lines as f32 / num_ref_lines as f32
-    (2 * num_matching_lines) as f32 / total_num_lines as f32
-}
-
-/// Returns the number of lines that exist both in `ref_lines` and in `comp_lines`.
-///
-/// Note: Final new lines are included in the diff comparisons.
-///
-/// # Examples
-///
-/// ```
-/// //                ✓   ✓  x   ✓   x      = 3
-/// let ref_lines = "12\n14\n5\n17\n19\n";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_num_matching_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 3);
-/// ```
-/// ---
-/// ```
-/// //                ✓   ✓  x   x    = 2
-/// let ref_lines = "12\n14\n5\n17";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_num_matching_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 2);
-/// ```
-///
-pub fn get_num_matching_lines(ref_lines: &str, comp_lines: &str) -> usize {
     let diff = TextDiff::from_lines(ref_lines, comp_lines);
-    let num_matching_lines = diff
-        .iter_all_changes()
-        .filter(|change| change.tag() == ChangeTag::Equal)
-        .count();
-
-    num_matching_lines
+    diff.ratio()
 }

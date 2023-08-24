@@ -1,7 +1,6 @@
-use busca::{compare_file, Args, FileMatch, FileMatches};
+use busca::{compare_file, parse_glob_pattern, Args, FileMatch, FileMatches};
 use clap::Parser;
 use console::{style, Style};
-use glob::Pattern;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 use inquire::{InquireError, Select};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -135,13 +134,6 @@ impl InputArgs {
             ));
         }
 
-        fn parse_glob_pattern(pattern_string: &str) -> Pattern {
-            match glob::Pattern::new(pattern_string) {
-                Ok(pattern) => pattern,
-                Err(e) => graceful_panic(&format!("{:?} for '{}'", e, pattern_string)),
-            }
-        }
-
         // Parse the include glob patterns from input args strings
         let include_patterns = self.include_glob.map(|include_substring_vec| {
             include_substring_vec
@@ -172,6 +164,7 @@ impl InputArgs {
 #[cfg(test)]
 mod test_input_args_validation {
     use super::*;
+    use glob::Pattern;
 
     fn get_valid_args() -> Args {
         Args {
@@ -342,8 +335,9 @@ fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
     Ok(busca::FileMatches(file_match_vec))
 }
 #[cfg(test)]
-mod test_run_search {
+mod test_cli_run_search {
     use super::*;
+    use glob::Pattern;
 
     fn get_valid_args() -> Args {
         Args {
