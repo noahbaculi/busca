@@ -33,3 +33,23 @@ jobs:
           rm -r .github
           cd -
       - run: cargo test
+  
+  python-test:
+    name: Python Test
+    needs: [build-clippy, test]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Create Python environment
+        run: |
+          python -m venv ./python_venv
+          source python_venv/bin/activate
+          pip install -r python_requirements.txt
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: develop
+          args: --release
+      - run: python python/test.py
