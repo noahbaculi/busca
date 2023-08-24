@@ -15,3 +15,9 @@ pip install -r python_requirements.txt
 ```shell
 pip freeze > python_requirements.txt
 ```
+
+## Build Python package
+
+```shell
+maturin develop --release
+```
