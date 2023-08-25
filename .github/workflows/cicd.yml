@@ -1,4 +1,4 @@
-name: Rust
+name: CICD
 
 on: push
 
@@ -43,8 +43,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      - name: Create Python environment
-        run: |
+      - run: |
           python -m venv ./python_venv
           source python_venv/bin/activate
           pip install -r python_requirements.txt
