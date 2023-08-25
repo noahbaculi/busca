@@ -8,18 +8,22 @@ def example_usage():
     reference_file_path = "./sample_dir_hello_world/file_1.py"
 
     with open(reference_file_path, "r") as file:
-        ref_str = file.read()
+        reference_string = file.read()
+
     file_matches = busca.search_for_lines(
-        reference_string=ref_str,
+        reference_string=reference_string,
         search_path="./",
         max_lines=1000,
         count=5,
         include_globs=["*.py"],
     )
 
-    assert file_matches[0].path == reference_file_path
-    assert file_matches[0].percent_match == 1.0
-    assert file_matches[0].lines == ref_str
+    closest_file_match = file_matches[0]
+    assert closest_file_match.path == reference_file_path
+    assert closest_file_match.percent_match == 1.0
+    assert closest_file_match.lines == reference_string
+
+    new_file_match = busca.FileMatch("file/path", 1.0, "file\ncontent")
 
 
 class TestSearchResults(unittest.TestCase):

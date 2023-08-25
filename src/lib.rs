@@ -18,6 +18,14 @@ pub struct FileMatch {
 }
 #[pymethods]
 impl FileMatch {
+    #[new]
+    fn new(path: PathBuf, percent_match: f32, lines: String) -> Self {
+        Self {
+            path,
+            percent_match,
+            lines,
+        }
+    }
     fn __repr__(&self) -> String {
         format!("{:?}", self)
     }
