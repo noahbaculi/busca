@@ -178,7 +178,8 @@ pub fn parse_glob_pattern(pattern_string: &str) -> Pattern {
 /// A Python module of the Rust `busca` file matching library.
 /// https://github.com/noahbaculi/busca
 #[pymodule]
-fn busca(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
+#[pyo3(name = "busca_py")]
+fn python_module(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
     module.add_class::<FileMatch>()?;
     module.add_function(wrap_pyfunction!(search_for_lines, module)?)?;
     Ok(())

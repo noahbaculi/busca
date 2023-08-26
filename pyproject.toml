@@ -3,10 +3,15 @@ requires = ["maturin>=1,<2"]
 build-backend = "maturin"
 
 [project]
-name = "busca"
+name = "busca_py"
+description = "Library to find the closest matches to a reference."
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+
+
+[tool.maturin]
+module-name = "busca_py"

@@ -1,7 +1,7 @@
 import unittest
 from time import perf_counter
 
-import busca
+import busca_py as busca
 
 
 def example_usage():
