@@ -16,8 +16,24 @@ pip install -r python_requirements.txt
 pip freeze > python_requirements.txt
 ```
 
-## Build Python package
+## Build Python package locally
 
 ```shell
 maturin develop --release
+```
+
+## Run Python tests
+
+```shell
+python -m unittest discover
+```
+
+## Publish Python package to PyPi
+
+First, add the `MATURIN_USERNAME` and `MATURIN_PASSWORD` environment variables using the values of an API token from PyPI.
+
+> Note: Publishing to PyPI requires a new version number.
+
+```shell
+maturin publish
 ```

@@ -43,9 +43,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      - run: |
+      - name: Run Python tests
+        run: |
           python -m venv ./python_venv
           source python_venv/bin/activate
           pip install -r python_requirements.txt
           maturin develop --release
           python python/test.py
+          python -m unittest discover
