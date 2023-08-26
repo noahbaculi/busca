@@ -94,7 +94,7 @@ struct InputArgs {
 
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
-    count: u8,
+    count: usize,
 }
 
 impl InputArgs {
@@ -330,7 +330,7 @@ fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
     });
 
     // Keep the top matches
-    file_match_vec.truncate(args.count.into());
+    file_match_vec.truncate(args.count);
 
     Ok(busca::FileMatches(file_match_vec))
 }

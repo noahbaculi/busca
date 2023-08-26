@@ -133,7 +133,7 @@ fn search_for_lines(
     reference_string: String,
     search_path: PathBuf,
     max_lines: u32,
-    count: u8,
+    count: usize,
     include_globs: Option<Vec<String>>,
     exclude_globs: Option<Vec<String>>,
 ) -> PyResult<Vec<FileMatch>> {
@@ -192,7 +192,7 @@ pub struct Args {
     pub max_lines: u32,
     pub include_patterns: Option<Vec<Pattern>>,
     pub exclude_patterns: Option<Vec<Pattern>>,
-    pub count: u8,
+    pub count: usize,
 }
 
 pub fn run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
@@ -216,7 +216,7 @@ pub fn run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
     });
 
     // Keep the top matches
-    file_match_vec.truncate(args.count.into());
+    file_match_vec.truncate(args.count);
 
     Ok(file_match_vec)
 }
