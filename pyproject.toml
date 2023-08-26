@@ -2,16 +2,23 @@
 requires = ["maturin>=1,<2"]
 build-backend = "maturin"
 
+[tool.maturin]
+module-name = "busca_py"
+
 [project]
 name = "busca_py"
-description = "Library to find the closest matches to a reference."
+authors = [{ name = "Noah Baculi", email = "noahbaculi@gmail.com" }]
+description = "Library to find the closest file matches to a reference."
+readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+keywords = ["file", "match", "closest"]
 
-
-[tool.maturin]
-module-name = "busca_py"
+[project.urls] # Optional
+"Homepage" = "https://github.com/noahbaculi/busca"
+"Bug Reports" = "https://github.com/noahbaculi/busca/issues"
+"Source" = "https://github.com/noahbaculi/busca"
