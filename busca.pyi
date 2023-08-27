@@ -23,7 +23,7 @@ class FileMatch:
 def search_for_lines(
     reference_string: str,
     search_path: str,
-    max_lines: int,
+    max_lines: Optional[int],
     count: Optional[int],
     include_globs: Optional[list[str]] = None,
     exclude_globs: Optional[list[str]] = None,

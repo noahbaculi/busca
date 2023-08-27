@@ -132,7 +132,7 @@ impl fmt::Display for FileMatches {
 fn search_for_lines(
     reference_string: String,
     search_path: PathBuf,
-    max_lines: u32,
+    max_lines: Option<usize>,
     count: Option<usize>,
     include_globs: Option<Vec<String>>,
     exclude_globs: Option<Vec<String>>,
@@ -189,7 +189,7 @@ fn python_module(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
 pub struct Args {
     pub reference_string: String,
     pub search_path: PathBuf,
-    pub max_lines: u32,
+    pub max_lines: Option<usize>,
     pub include_patterns: Option<Vec<Pattern>>,
     pub exclude_patterns: Option<Vec<Pattern>>,
     pub count: Option<usize>,
@@ -231,7 +231,7 @@ mod test_run_search {
             reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
                 .unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: 5000,
+            max_lines: Some(5000),
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(2),
@@ -335,9 +335,11 @@ pub fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<Fi
         },
     };
 
-    let num_comp_lines = comp_lines.lines().count();
-    if (num_comp_lines > args.max_lines as usize) | (num_comp_lines == 0) {
-        return None;
+    if let Some(max_lines) = args.max_lines {
+        let num_comp_lines = comp_lines.lines().count();
+        if (num_comp_lines > max_lines) | (num_comp_lines == 0) {
+            return None;
+        }
     }
 
     let percent_match = get_percent_matching_lines(ref_lines, &comp_lines);
@@ -356,7 +358,7 @@ mod test_compare_file {
         Args {
             reference_string: fs::read_to_string("sample_dir_hello_world/file_2.py").unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: 5000,
+            max_lines: Some(5000),
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(8),

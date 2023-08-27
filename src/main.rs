@@ -82,7 +82,7 @@ struct InputArgs {
     /// The number of lines to consider when comparing files. Files with more
     /// lines will be skipped.
     #[arg(short, long, default_value_t = 10_000)]
-    max_lines: u32,
+    max_lines: usize,
 
     /// Globs that qualify a file for comparison
     #[arg(short, long)]
@@ -153,7 +153,7 @@ impl InputArgs {
         Ok(Args {
             reference_string,
             search_path,
-            max_lines: self.max_lines,
+            max_lines: Some(self.max_lines),
             include_patterns,
             exclude_patterns,
             count: Some(self.count),
@@ -170,7 +170,7 @@ mod test_input_args_validation {
         Args {
             reference_string: fs::read_to_string("sample_dir_hello_world/file_3.py").unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: 5000,
+            max_lines: Some(5000),
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(8),
@@ -185,7 +185,7 @@ mod test_input_args_validation {
         let input_args = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(valid_args.search_path.clone()),
-            max_lines: valid_args.max_lines,
+            max_lines: valid_args.max_lines.unwrap(),
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
@@ -204,14 +204,14 @@ mod test_input_args_validation {
     }
 
     #[test]
-    fn override_args() {
+    fn missing_optional_args() {
         let valid_args = get_valid_args();
         let input_args = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: None,
-            max_lines: valid_args.max_lines,
-            include_glob: Some(vec!["*.py".to_owned()]),
-            exclude_glob: Some(vec!["*.yml".to_owned()]),
+            max_lines: valid_args.max_lines.unwrap(),
+            include_glob: None,
+            exclude_glob: None,
             count: valid_args.count.unwrap(),
         };
         assert_eq!(
@@ -220,8 +220,8 @@ mod test_input_args_validation {
                 reference_string: valid_args.reference_string,
                 search_path: env::current_dir().unwrap(),
                 max_lines: valid_args.max_lines,
-                include_patterns: valid_args.include_patterns.clone(),
-                exclude_patterns: valid_args.exclude_patterns.clone(),
+                include_patterns: None,
+                exclude_patterns: None,
                 count: valid_args.count,
             })
         );
@@ -233,7 +233,7 @@ mod test_input_args_validation {
         let input_args_wrong_ref_file = InputArgs {
             ref_file_path: Some(PathBuf::from("nonexistent_path")),
             search_path: Some(valid_args.search_path.clone()),
-            max_lines: valid_args.max_lines,
+            max_lines: valid_args.max_lines.unwrap(),
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
@@ -250,7 +250,7 @@ mod test_input_args_validation {
         let input_args_wrong_ref_file = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(PathBuf::from("nonexistent_path")),
-            max_lines: valid_args.max_lines,
+            max_lines: valid_args.max_lines.unwrap(),
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
@@ -346,7 +346,7 @@ mod test_cli_run_search {
             reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
                 .unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: 5000,
+            max_lines: Some(5000),
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(2),
