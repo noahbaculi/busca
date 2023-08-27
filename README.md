@@ -3,11 +3,11 @@
 [![Build](https://github.com/noahbaculi/busca/actions/workflows/rust.yml/badge.svg?branch=main&event=push)](https://github.com/noahbaculi/busca/actions/workflows/rust.yml)
 [![PyPI version](https://badge.fury.io/py/busca-py.svg)](https://badge.fury.io/py/busca-py)
 
-<img src="documentation/logo.png" alt="busca logo" width="200">
+<img src="https://raw.githubusercontent.com/noahbaculi/busca/python_package/documentation/logo.png" alt="busca logo" width="200">
 
 CLI and library to search for files with content that most closely match the lines of a reference string.
 
-![Busca Demo](documentation/Demo_Recording.gif)
+![Busca Demo](https://raw.githubusercontent.com/noahbaculi/busca/python_package/documentation/Demo_Recording.gif)
 
 ## Table of Contents
 
@@ -82,7 +82,7 @@ new_file_match = busca.FileMatch("file/path", 1.0, "file\ncontent")
 busca -h
 ```
 
-Output for v2.1.2
+Output for v2.1.3
 
 ```text
 Simple utility to search for files with content that most closely match the lines of a reference string
