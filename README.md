@@ -3,11 +3,11 @@
 [![Build](https://github.com/noahbaculi/busca/actions/workflows/rust.yml/badge.svg?branch=main&event=push)](https://github.com/noahbaculi/busca/actions/workflows/rust.yml)
 [![PyPI version](https://badge.fury.io/py/busca-py.svg)](https://badge.fury.io/py/busca-py)
 
-<img src="https://user-images.githubusercontent.com/49008873/235764259-078d5bfc-e4ec-441c-9178-13c3b41a1fe2.png" alt="busca logo" width="200">
+<img src="documentation/logo.png" alt="busca logo" width="200">
 
 CLI and library to search for files with content that most closely match the lines of a reference string.
 
-<https://user-images.githubusercontent.com/49008873/235590754-efdeb134-feb1-44ec-bbac-44ccb737261a.mov>
+![Busca Demo](documentation/Demo_Recording.gif)
 
 ## Table of Contents
 
@@ -45,7 +45,10 @@ with open(reference_file_path, "r") as file:
     reference_string = file.read()
 
 # Perform search with required parameters
-all_file_matches = busca.search_for_lines(reference_string=reference_string, search_path="./sample_dir_hello_world")
+all_file_matches = busca.search_for_lines(
+    reference_string=reference_string,
+    search_path="./sample_dir_hello_world",
+)
 
 # File matches are returned in descending order of percent match
 closest_file_match = all_file_matches[0]
@@ -53,7 +56,8 @@ assert closest_file_match.path == reference_file_path
 assert closest_file_match.percent_match == 1.0
 assert closest_file_match.lines == reference_string
 
-# Perform search for top 5 matches with additional filters to speed up runtime by skipping files that will not match
+# Perform search for top 5 matches with additional filters
+# to speed up runtime by skipping files that will not match
 relevant_file_matches = busca.search_for_lines(
     reference_string=reference_string,
     search_path="./sample_dir_hello_world",

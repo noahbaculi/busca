@@ -10,7 +10,10 @@ def example_usage():
         reference_string = file.read()
 
     # Perform search with required parameters
-    all_file_matches = busca.search_for_lines(reference_string=reference_string, search_path="./sample_dir_hello_world")
+    all_file_matches = busca.search_for_lines(
+        reference_string=reference_string,
+        search_path="./sample_dir_hello_world",
+    )
 
     # File matches are returned in descending order of percent match
     closest_file_match = all_file_matches[0]
@@ -18,7 +21,8 @@ def example_usage():
     assert closest_file_match.percent_match == 1.0
     assert closest_file_match.lines == reference_string
 
-    # Perform search for top 5 matches with additional filters to speed up runtime by skipping files that will not match
+    # Perform search for top 5 matches with additional filters
+    # to speed up runtime by skipping files that will not match
     relevant_file_matches = busca.search_for_lines(
         reference_string=reference_string,
         search_path="./sample_dir_hello_world",
