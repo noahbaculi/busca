@@ -2,7 +2,7 @@ from typing import Optional
 
 class FileMatch:
     """
-    Data structure to represent a file that matches the search criteria. It has three attributes:
+    Data structure to represent a file's match to the reference string lines. It has three attributes:
     ...
 
     Attributes
@@ -28,4 +28,4 @@ def search_for_lines(
     include_globs: Optional[list[str]] = None,
     exclude_globs: Optional[list[str]] = None,
 ) -> list[FileMatch]:
-    """Search for files in a search path that match the lines of a references string."""
+    """Search for files with content that most closely match the lines of a reference string."""

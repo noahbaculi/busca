@@ -127,7 +127,6 @@ impl fmt::Display for FileMatches {
     }
 }
 
-/// Search for file matches in a search path.
 #[pyfunction]
 fn search_for_lines(
     reference_string: String,

@@ -62,8 +62,7 @@ fn main() {
     output_detailed_diff(&args.reference_string, &comp_lines);
 }
 
-/// Simple utility to find the closest matches to a reference file or piped input
-/// based on the number of lines in the reference that exist in each compared file.
+/// Simple utility to search for files with content that most closely match the lines of a reference string.
 #[derive(Parser, Debug)]
 #[command(author="Noah Baculi", version, about, long_about = None, override_usage="\
     busca --ref-file-path <REF_FILE_PATH> [OPTIONS]\n       \
