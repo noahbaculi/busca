@@ -14,15 +14,18 @@ def example_usage():
         reference_string=reference_string,
         search_path="./",
         max_lines=1000,
-        count=5,
         include_globs=["*.py"],
     )
 
+    # File matches are returned in descending order of percent match
     closest_file_match = file_matches[0]
     assert closest_file_match.path == reference_file_path
     assert closest_file_match.percent_match == 1.0
     assert closest_file_match.lines == reference_string
 
+    breakpoint()
+
+    # Create new file match object
     new_file_match = busca.FileMatch("file/path", 1.0, "file\ncontent")
 
 

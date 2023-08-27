@@ -156,7 +156,7 @@ impl InputArgs {
             max_lines: self.max_lines,
             include_patterns,
             exclude_patterns,
-            count: self.count,
+            count: Some(self.count),
         })
     }
 }
@@ -173,7 +173,7 @@ mod test_input_args_validation {
             max_lines: 5000,
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
-            count: 8,
+            count: Some(8),
         }
     }
 
@@ -188,7 +188,7 @@ mod test_input_args_validation {
             max_lines: valid_args.max_lines,
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
-            count: valid_args.count,
+            count: valid_args.count.unwrap(),
         };
         assert_eq!(
             input_args.into_args(),
@@ -212,7 +212,7 @@ mod test_input_args_validation {
             max_lines: valid_args.max_lines,
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
-            count: valid_args.count,
+            count: valid_args.count.unwrap(),
         };
         assert_eq!(
             input_args.into_args(),
@@ -236,7 +236,7 @@ mod test_input_args_validation {
             max_lines: valid_args.max_lines,
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
-            count: valid_args.count,
+            count: valid_args.count.unwrap(),
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
@@ -253,7 +253,7 @@ mod test_input_args_validation {
             max_lines: valid_args.max_lines,
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
-            count: valid_args.count,
+            count: valid_args.count.unwrap(),
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
@@ -329,8 +329,10 @@ fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Keep the top matches
-    file_match_vec.truncate(args.count);
+    if let Some(count) = args.count {
+        // Keep the top matches
+        file_match_vec.truncate(count);
+    }
 
     Ok(busca::FileMatches(file_match_vec))
 }
@@ -347,7 +349,7 @@ mod test_cli_run_search {
             max_lines: 5000,
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
-            count: 2,
+            count: Some(2),
         }
     }
 

@@ -133,7 +133,7 @@ fn search_for_lines(
     reference_string: String,
     search_path: PathBuf,
     max_lines: u32,
-    count: usize,
+    count: Option<usize>,
     include_globs: Option<Vec<String>>,
     exclude_globs: Option<Vec<String>>,
 ) -> PyResult<Vec<FileMatch>> {
@@ -192,7 +192,7 @@ pub struct Args {
     pub max_lines: u32,
     pub include_patterns: Option<Vec<Pattern>>,
     pub exclude_patterns: Option<Vec<Pattern>>,
-    pub count: usize,
+    pub count: Option<usize>,
 }
 
 pub fn run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
@@ -215,8 +215,10 @@ pub fn run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Keep the top matches
-    file_match_vec.truncate(args.count);
+    if let Some(count) = args.count {
+        // Keep the top matches
+        file_match_vec.truncate(count);
+    }
 
     Ok(file_match_vec)
 }
@@ -232,7 +234,7 @@ mod test_run_search {
             max_lines: 5000,
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
-            count: 2,
+            count: Some(2),
         }
     }
 
@@ -357,7 +359,7 @@ mod test_compare_file {
             max_lines: 5000,
             include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
-            count: 8,
+            count: Some(8),
         }
     }
 
