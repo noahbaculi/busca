@@ -1,6 +1,6 @@
 # busca
 
-[![Build](https://github.com/noahbaculi/busca/actions/workflows/rust.yml/badge.svg?branch=main&event=push)](https://github.com/noahbaculi/busca/actions/workflows/rust.yml)
+[![CICD](https://github.com/noahbaculi/busca/actions/workflows/cicd.yml/badge.svg)](https://github.com/noahbaculi/busca/actions/workflows/cicd.yml)
 [![PyPI version](https://badge.fury.io/py/busca-py.svg)](https://badge.fury.io/py/busca-py)
 
 <img src="https://raw.githubusercontent.com/noahbaculi/busca/python_package/documentation/logo.png" alt="busca logo" width="200">
