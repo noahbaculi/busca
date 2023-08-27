@@ -1,18 +1,17 @@
-# Release
+# CLI Release
 
-Releasing guide.
+CLI releasing guide.
 
 ## Pick Version Number
 
 > [Methodology: X.Y.Z, which corresponds to major.minor.patch.](https://semver.org/)
 
-Update the version in the `Cargo.toml` file:
+Update the version in the `Cargo.toml` file.
 
 ```toml
 [package]
 name = "busca"
 version = "0.1.1"
-edition = "2021"
 ...
 ```
 
