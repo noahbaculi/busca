@@ -1,3 +1,4 @@
+import inspect
 import unittest
 from time import perf_counter
 
@@ -35,6 +36,19 @@ def example_usage():
 
     # Create new file match object
     new_file_match = busca.FileMatch("file/path", 1.0, "file\ncontent")
+
+
+class TestSignatures(unittest.TestCase):
+    def test_module_contains_functions(self):
+        expected_functions = {"search_for_lines"}
+        module_attributes = set(dir(busca))
+        self.assertTrue(expected_functions.issubset(module_attributes))
+
+    def test_non_empty_search_function_signature(self):
+        self.assertTrue(inspect.signature(busca.search_for_lines).parameters.items())
+
+    def test_non_empty_file_match_class_signature(self):
+        self.assertTrue(inspect.signature(busca.FileMatch).parameters.items())
 
 
 class TestSearchResults(unittest.TestCase):
@@ -98,5 +112,5 @@ class TestSearchDuration(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    example_usage()
     unittest.main()
+    example_usage()
