@@ -82,7 +82,7 @@ new_file_match = busca.FileMatch("file/path", 1.0, "file\ncontent")
 busca -h
 ```
 
-Output for v2.1.1
+Output for v2.1.2
 
 ```text
 Simple utility to search for files with content that most closely match the lines of a reference string

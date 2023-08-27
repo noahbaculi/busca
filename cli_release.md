@@ -25,13 +25,16 @@ file target/aarch64-apple-darwin/release/busca  # --> Mach-O 64-bit executable a
 
 # MacOS x86/Intel architecture
 rustup target install x86_64-apple-darwin
-cargo build --release --target x86_64-apple-darwin 
+cargo build --release --target x86_64-apple-darwin
 file target/x86_64-apple-darwin/release/busca   # --> Mach-O 64-bit executable x86_64
 
 # Build universal binary
 mkdir -p target/apple-darwin-universal/release
 lipo -create target/x86_64-apple-darwin/release/busca target/aarch64-apple-darwin/release/busca -output target/apple-darwin-universal/release/busca
 file target/apple-darwin-universal/release/busca   # --> Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64]
+
+# Copy binary to local $PATH for development
+cp target/apple-darwin-universal/release/busca python_venv/bin/busca
 ```
 
 ## Create TAR archive and GitHub release
@@ -50,3 +53,9 @@ Add GitHub release with the version number and release notes. Copy the URL of th
 ## Update the Homebrew Tap
 
 [Add Homebrew version](https://github.com/noahbaculi/homebrew-busca).
+
+## Demo Recording Tips
+
+- Use MacOS built-in screen recording to capture screen.
+- Use Oh-My-Posh `Bubbles` terminal theme.
+- Use Iterm2's `Advanced Paste` to simulate typing effect. `Edit > Paste Special > Advanced Paste...`
