@@ -1,11 +1,13 @@
 use glob::Pattern;
+use memoize::memoize;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use similar::TextDiff;
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::time::Instant;
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use walkdir::WalkDir;
 
@@ -199,25 +201,33 @@ pub fn run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
         .into_iter()
         .collect::<Vec<_>>();
 
+    let t_compare_files = Instant::now();
     let mut file_match_vec: Vec<FileMatch> = walkdir_vec
-        .par_iter()
+        // .into_par_iter()
+        .into_iter()
         .filter_map(|dir_entry_result| match dir_entry_result {
-            Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+            Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
             Err(_) => None,
         })
         .collect();
+    dbg!(t_compare_files.elapsed());
 
     // Sort by percent match
+    let t_sort_matches = Instant::now();
     file_match_vec.sort_by(|a, b| {
         b.percent_match
             .partial_cmp(&a.percent_match)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
+    dbg!(t_sort_matches.elapsed());
 
+    let t_truncate = Instant::now();
     if let Some(count) = args.count {
         // Keep the top matches
         file_match_vec.truncate(count);
     }
+    dbg!(t_truncate.elapsed());
+    println!();
 
     Ok(file_match_vec)
 }
@@ -291,7 +301,7 @@ mod test_run_search {
     }
 }
 
-pub fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<FileMatch> {
+pub fn compare_file(comp_path: PathBuf, args: &Args, ref_lines: &str) -> Option<FileMatch> {
     // Skip paths that are not files
     if !comp_path.is_file() {
         return None;
@@ -302,7 +312,7 @@ pub fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<Fi
         Some(include_pattern_vec) => {
             let contains_glob_pattern = include_pattern_vec
                 .iter()
-                .any(|include_pattern| include_pattern.matches_path(comp_path));
+                .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
 
             if !contains_glob_pattern {
                 return None;
@@ -316,7 +326,7 @@ pub fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<Fi
         Some(exclude_pattern_vec) => {
             let contains_glob_pattern = exclude_pattern_vec
                 .iter()
-                .any(|include_pattern| include_pattern.matches_path(comp_path));
+                .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
 
             if contains_glob_pattern {
                 return None;
@@ -325,13 +335,9 @@ pub fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<Fi
         None => (),
     };
 
-    let comp_reader = fs::read_to_string(comp_path);
-    let comp_lines = match comp_reader {
-        Ok(lines) => lines,
-        Err(error) => match error.kind() {
-            std::io::ErrorKind::InvalidData => return None,
-            other_error => panic!("{:?}", other_error),
-        },
+    let comp_lines = match read_file(comp_path.clone()) {
+        Some(value) => value,
+        None => return None,
     };
 
     if let Some(max_lines) = args.max_lines {
@@ -344,11 +350,25 @@ pub fn compare_file(comp_path: &Path, args: &Args, ref_lines: &str) -> Option<Fi
     let percent_match = get_percent_matching_lines(ref_lines, &comp_lines);
 
     Some(FileMatch {
-        path: PathBuf::from(comp_path),
+        path: comp_path,
         percent_match,
         lines: comp_lines,
     })
 }
+
+#[memoize]
+fn read_file(comp_path: PathBuf) -> Option<String> {
+    let comp_reader = fs::read_to_string(comp_path);
+    let comp_lines = match comp_reader {
+        Ok(lines) => lines,
+        Err(error) => match error.kind() {
+            std::io::ErrorKind::InvalidData => return None,
+            other_error => panic!("{:?}", other_error),
+        },
+    };
+    Some(comp_lines)
+}
+
 #[cfg(test)]
 mod test_compare_file {
     use super::*;
@@ -378,7 +398,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, &ref_lines);
 
         assert_eq!(file_comparison, None);
     }
@@ -397,7 +417,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, &ref_lines);
 
         assert_eq!(
             file_comparison,
@@ -425,7 +445,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, &ref_lines);
+        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, &ref_lines);
 
         assert_eq!(
             file_comparison,
@@ -450,7 +470,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, "");
 
         assert_eq!(
             file_comparison,
@@ -475,7 +495,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.path(), &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, "");
 
         assert_eq!(file_comparison, None);
     }

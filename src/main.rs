@@ -3,7 +3,8 @@ use clap::Parser;
 use console::{style, Style};
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 use inquire::{InquireError, Select};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
+use rayon::prelude::IntoParallelIterator;
 use similar::{ChangeTag, TextDiff};
 use std::env;
 use std::fmt;
@@ -299,10 +300,10 @@ fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
 
     let mut file_match_vec: Vec<FileMatch> = match progress_bar_style_result {
         Ok(progress_bar_style) => walkdir_vec
-            .par_iter()
+            .into_par_iter()
             .progress_with_style(progress_bar_style.progress_chars("#>-"))
             .filter_map(|dir_entry_result| match dir_entry_result {
-                Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+                Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
                 Err(_) => None,
             })
             .collect(),
@@ -312,9 +313,11 @@ fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
                 "The progress bar could not be configured. Launching search without feedback. Comparing {} files...", walkdir_vec.len()
             );
             walkdir_vec
-                .par_iter()
+                .into_par_iter()
                 .filter_map(|dir_entry_result| match dir_entry_result {
-                    Ok(dir_entry) => compare_file(dir_entry.path(), args, &args.reference_string),
+                    Ok(dir_entry) => {
+                        compare_file(dir_entry.into_path(), args, &args.reference_string)
+                    }
                     Err(_) => None,
                 })
                 .collect()
