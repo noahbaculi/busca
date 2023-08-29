@@ -3,13 +3,14 @@ use memoize::memoize;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::IntoParallelIterator;
 use similar::TextDiff;
 use std::fmt;
-use std::fs;
+use std::fs::{self};
 use std::path::PathBuf;
 use std::time::Instant;
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
-use walkdir::WalkDir;
+use walkdir::{DirEntry, Error, WalkDir};
 
 #[pyclass(get_all)]
 #[derive(Debug, Clone, PartialEq)]
@@ -201,35 +202,7 @@ pub fn run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
         .into_iter()
         .collect::<Vec<_>>();
 
-    let t_compare_files = Instant::now();
-    let mut file_match_vec: Vec<FileMatch> = walkdir_vec
-        // .into_par_iter()
-        .into_iter()
-        .filter_map(|dir_entry_result| match dir_entry_result {
-            Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
-            Err(_) => None,
-        })
-        .collect();
-    dbg!(t_compare_files.elapsed());
-
-    // Sort by percent match
-    let t_sort_matches = Instant::now();
-    file_match_vec.sort_by(|a, b| {
-        b.percent_match
-            .partial_cmp(&a.percent_match)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    dbg!(t_sort_matches.elapsed());
-
-    let t_truncate = Instant::now();
-    if let Some(count) = args.count {
-        // Keep the top matches
-        file_match_vec.truncate(count);
-    }
-    dbg!(t_truncate.elapsed());
-    println!();
-
-    Ok(file_match_vec)
+    Ok(compare_files(walkdir_vec.into_par_iter(), args))
 }
 #[cfg(test)]
 mod test_run_search {
@@ -301,6 +274,39 @@ mod test_run_search {
     }
 }
 
+pub fn compare_files(
+    walkdir_iterator: impl ParallelIterator<Item = Result<DirEntry, Error>>,
+    args: &Args,
+) -> Vec<FileMatch> {
+    let t_compare_files = Instant::now();
+    let mut file_match_vec: Vec<FileMatch> = walkdir_iterator
+        .filter_map(|dir_entry_result| match dir_entry_result {
+            Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
+            Err(_) => None,
+        })
+        .collect();
+    dbg!(t_compare_files.elapsed());
+
+    // Sort by percent match
+    let t_sort_matches = Instant::now();
+    file_match_vec.sort_by(|a, b| {
+        b.percent_match
+            .partial_cmp(&a.percent_match)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    dbg!(t_sort_matches.elapsed());
+
+    let t_truncate = Instant::now();
+    if let Some(count) = args.count {
+        // Keep the top matches
+        file_match_vec.truncate(count);
+    }
+    dbg!(t_truncate.elapsed());
+    println!();
+
+    file_match_vec
+}
+
 pub fn compare_file(comp_path: PathBuf, args: &Args, ref_lines: &str) -> Option<FileMatch> {
     // Skip paths that are not files
     if !comp_path.is_file() {
@@ -311,7 +317,7 @@ pub fn compare_file(comp_path: PathBuf, args: &Args, ref_lines: &str) -> Option<
     match &args.include_patterns {
         Some(include_pattern_vec) => {
             let contains_glob_pattern = include_pattern_vec
-                .iter()
+                .par_iter()
                 .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
 
             if !contains_glob_pattern {
@@ -325,7 +331,7 @@ pub fn compare_file(comp_path: PathBuf, args: &Args, ref_lines: &str) -> Option<
     match &args.exclude_patterns {
         Some(exclude_pattern_vec) => {
             let contains_glob_pattern = exclude_pattern_vec
-                .iter()
+                .par_iter()
                 .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
 
             if contains_glob_pattern {

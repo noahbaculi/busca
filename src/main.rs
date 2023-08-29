@@ -1,9 +1,8 @@
-use busca::{compare_file, parse_glob_pattern, Args, FileMatch, FileMatches};
+use busca::{compare_files, parse_glob_pattern, Args, FileMatch, FileMatches};
 use clap::Parser;
 use console::{style, Style};
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 use inquire::{InquireError, Select};
-use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use similar::{ChangeTag, TextDiff};
 use std::env;
@@ -298,46 +297,26 @@ fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
         .into_iter()
         .collect::<Vec<_>>();
 
-    let mut file_match_vec: Vec<FileMatch> = match progress_bar_style_result {
-        Ok(progress_bar_style) => walkdir_vec
-            .into_par_iter()
-            .progress_with_style(progress_bar_style.progress_chars("#>-"))
-            .filter_map(|dir_entry_result| match dir_entry_result {
-                Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
-                Err(_) => None,
-            })
-            .collect(),
+    let file_match_vec: Vec<FileMatch> = match progress_bar_style_result {
+        Ok(progress_bar_style) => compare_files(
+            walkdir_vec
+                .into_par_iter()
+                .progress_with_style(progress_bar_style.progress_chars("#>-")),
+            args,
+        ),
 
         Err(_) => {
             println!(
-                "The progress bar could not be configured. Launching search without feedback. Comparing {} files...", walkdir_vec.len()
+                "The progress bar could not be configured. Comparing {} files...",
+                walkdir_vec.len()
             );
-            walkdir_vec
-                .into_par_iter()
-                .filter_map(|dir_entry_result| match dir_entry_result {
-                    Ok(dir_entry) => {
-                        compare_file(dir_entry.into_path(), args, &args.reference_string)
-                    }
-                    Err(_) => None,
-                })
-                .collect()
+            compare_files(walkdir_vec.into_par_iter(), args)
         }
     };
 
-    // Sort by percent match
-    file_match_vec.sort_by(|a, b| {
-        b.percent_match
-            .partial_cmp(&a.percent_match)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    if let Some(count) = args.count {
-        // Keep the top matches
-        file_match_vec.truncate(count);
-    }
-
     Ok(busca::FileMatches(file_match_vec))
 }
+
 #[cfg(test)]
 mod test_cli_run_search {
     use super::*;
@@ -415,7 +394,7 @@ fn output_detailed_diff(ref_lines: &str, comp_lines: &str) {
     let grouped_operations = diff.grouped_ops(3);
 
     if grouped_operations.is_empty() {
-        println!("The comparables are identical.");
+        println!("The sequences are identical.");
         return;
     }
 
