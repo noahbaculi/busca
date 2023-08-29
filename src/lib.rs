@@ -5,10 +5,8 @@ use pyo3::prelude::*;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::prelude::IntoParallelIterator;
 use similar::TextDiff;
-use std::fmt;
 use std::fs::{self};
 use std::path::PathBuf;
-use std::time::Instant;
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use walkdir::{DirEntry, Error, WalkDir};
 
@@ -34,100 +32,74 @@ impl FileMatch {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct FileMatches(pub Vec<FileMatch>);
+/// Returns a formatted string with one file match per line with path
+/// string, visualization, and match percentage.
+///
+/// # Examples
+///
+/// ```
+/// let file_matches = vec![
+///     busca::FileMatch {
+///         path: std::path::PathBuf::from("sample-comprehensive/projects/Geocoding/geocoding.py"),
+///         percent_match: 0.9846,
+///         lines: std::fs::read_to_string("sample-comprehensive/projects/Geocoding/geocoding.py").unwrap(),
+///     },
+///     busca::FileMatch {
+///         path: std::path::PathBuf::from(
+///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
+///         ),
+///         percent_match: 0.3481,
+///         lines: std::fs::read_to_string(
+///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
+///         ).unwrap(),
+///     },
+///     busca::FileMatch {
+///         path: std::path::PathBuf::from("sample-comprehensive/projects/chatbot/bot.py"),
+///         percent_match: 0.0521,
+///         lines: std::fs::read_to_string("sample-comprehensive/projects/chatbot/bot.py").unwrap(),
+///     },
+/// ];
 
-impl std::ops::Deref for FileMatches {
-    type Target = Vec<FileMatch>;
-    fn deref(&self) -> &Vec<FileMatch> {
-        &self.0
+/// let expected_output = "\
+/// sample-comprehensive/projects/Geocoding/geocoding.py                  ++++++++++  98.5%
+/// sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py  +++         34.8%
+/// sample-comprehensive/projects/chatbot/bot.py                          +            5.2%";
+
+/// assert_eq!(busca::format_file_matches(&file_matches), expected_output);
+/// ```
+///
+pub fn format_file_matches(file_matches: &[FileMatch]) -> String {
+    let mut grid = Grid::new(GridOptions {
+        filling: Filling::Spaces(2),
+        direction: Direction::LeftToRight,
+    });
+
+    for path_and_perc in file_matches.iter() {
+        // Add first column with the file path
+        grid.add(Cell::from(path_and_perc.path.display().to_string()));
+
+        // Add second column with the visual indicator of the match perc
+        let visual_indicator = "+".repeat((path_and_perc.percent_match * 10.0).round() as usize);
+        let vis_cell = Cell::from(visual_indicator);
+        grid.add(vis_cell);
+
+        // Add third column with the numerical match perc
+        let perc_str = format!("{:.1}%", (path_and_perc.percent_match * 100.0));
+        let mut perc_cell = Cell::from(perc_str);
+        perc_cell.alignment = Alignment::Right;
+        grid.add(perc_cell);
     }
-}
 
-impl std::ops::DerefMut for FileMatches {
-    fn deref_mut(&mut self) -> &mut Vec<FileMatch> {
-        &mut self.0
+    let disp = grid.fit_into_columns(3);
+
+    let mut display_string = disp.to_string();
+
+    // Remove trailing new line
+    if display_string.ends_with('\n') {
+        display_string.pop();
     }
-}
 
-impl FileMatches {
-    /// Returns a formatted string with one file match per line with path
-    /// string, visualization, and match percentage.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let file_matches = busca::FileMatches(vec![
-    ///     busca::FileMatch {
-    ///         path: std::path::PathBuf::from("sample-comprehensive/projects/Geocoding/geocoding.py"),
-    ///         percent_match: 0.9846,
-    ///         lines: std::fs::read_to_string("sample-comprehensive/projects/Geocoding/geocoding.py").unwrap(),
-    ///     },
-    ///     busca::FileMatch {
-    ///         path: std::path::PathBuf::from(
-    ///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
-    ///         ),
-    ///         percent_match: 0.3481,
-    ///         lines: std::fs::read_to_string(
-    ///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
-    ///         ).unwrap(),
-    ///     },
-    ///     busca::FileMatch {
-    ///         path: std::path::PathBuf::from("sample-comprehensive/projects/chatbot/bot.py"),
-    ///         percent_match: 0.0521,
-    ///         lines: std::fs::read_to_string("sample-comprehensive/projects/chatbot/bot.py").unwrap(),
-    ///     },
-    /// ]);
-
-    /// let expected_output = "\
-    /// sample-comprehensive/projects/Geocoding/geocoding.py                  ++++++++++  98.5%
-    /// sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py  +++         34.8%
-    /// sample-comprehensive/projects/chatbot/bot.py                          +            5.2%";
-
-    /// assert_eq!(file_matches.get_formatted_string(), expected_output);
-    /// ```
-    ///
-    pub fn get_formatted_string(&self) -> String {
-        let mut grid = Grid::new(GridOptions {
-            filling: Filling::Spaces(2),
-            direction: Direction::LeftToRight,
-        });
-
-        for path_and_perc in self.iter() {
-            // Add first column with the file path
-            grid.add(Cell::from(path_and_perc.path.display().to_string()));
-
-            // Add second column with the visual indicator of the match perc
-            let visual_indicator =
-                "+".repeat((path_and_perc.percent_match * 10.0).round() as usize);
-            let vis_cell = Cell::from(visual_indicator);
-            grid.add(vis_cell);
-
-            // Add third column with the numerical match perc
-            let perc_str = format!("{:.1}%", (path_and_perc.percent_match * 100.0));
-            let mut perc_cell = Cell::from(perc_str);
-            perc_cell.alignment = Alignment::Right;
-            grid.add(perc_cell);
-        }
-
-        let disp = grid.fit_into_columns(3);
-
-        let mut display_string = disp.to_string();
-
-        // Remove trailing new line
-        if display_string.ends_with('\n') {
-            display_string.pop();
-        }
-
-        display_string
-    }
-}
-
-impl fmt::Display for FileMatches {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let grid_str = self.get_formatted_string();
-        write!(f, "{}", grid_str)
-    }
+    display_string
 }
 
 #[pyfunction]
@@ -278,31 +250,24 @@ pub fn compare_files(
     walkdir_iterator: impl ParallelIterator<Item = Result<DirEntry, Error>>,
     args: &Args,
 ) -> Vec<FileMatch> {
-    let t_compare_files = Instant::now();
     let mut file_match_vec: Vec<FileMatch> = walkdir_iterator
         .filter_map(|dir_entry_result| match dir_entry_result {
             Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
             Err(_) => None,
         })
         .collect();
-    dbg!(t_compare_files.elapsed());
 
     // Sort by percent match
-    let t_sort_matches = Instant::now();
     file_match_vec.sort_by(|a, b| {
         b.percent_match
             .partial_cmp(&a.percent_match)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    dbg!(t_sort_matches.elapsed());
 
-    let t_truncate = Instant::now();
     if let Some(count) = args.count {
         // Keep the top matches
         file_match_vec.truncate(count);
     }
-    dbg!(t_truncate.elapsed());
-    println!();
 
     file_match_vec
 }

@@ -1,4 +1,5 @@
-use busca::{compare_files, parse_glob_pattern, Args, FileMatch, FileMatches};
+use busca::format_file_matches;
+use busca::{compare_files, parse_glob_pattern, Args, FileMatch};
 use clap::Parser;
 use console::{style, Style};
 use indicatif::{ParallelProgressIterator, ProgressStyle};
@@ -25,13 +26,13 @@ fn main() {
         Err(err_str) => graceful_panic(&err_str),
     };
 
-    let search_results = match cli_run_search(&args) {
+    let file_matches = match cli_run_search(&args) {
         Ok(search_results) => search_results,
         Err(_) => todo!(),
     };
 
-    let file_matches = &search_results.to_string();
-    let grid_options: Vec<&str> = file_matches.split('\n').collect();
+    let file_matches_output = format_file_matches(&file_matches);
+    let grid_options: Vec<&str> = file_matches_output.split('\n').collect();
 
     if grid_options.is_empty() {
         println!("No files found that match the criteria.");
@@ -39,7 +40,7 @@ fn main() {
     }
 
     if !interactive_input_mode() {
-        println!("{}", file_matches);
+        println!("{}", file_matches_output);
         println!("\nNote: Interactive prompt is not supported in this mode.");
         return;
     }
@@ -53,9 +54,9 @@ fn main() {
         Err(err) => graceful_panic(&err.to_string()),
     };
 
-    let selected_search = &search_results[ans.index];
-    let selected_search_path = &selected_search.path;
-    let comp_lines = match fs::read_to_string(selected_search_path) {
+    let selected_file_match = &file_matches[ans.index];
+    let selected_file_match_path = &selected_file_match.path;
+    let comp_lines = match fs::read_to_string(selected_file_match_path) {
         Ok(comp_lines) => comp_lines,
         Err(err) => graceful_panic(&err.to_string()),
     };
@@ -287,7 +288,7 @@ fn interactive_input_mode() -> bool {
     atty::is(atty::Stream::Stdin)
 }
 
-fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
+fn cli_run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
     // Create progress bar style
     let progress_bar_style_result = ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
@@ -314,7 +315,7 @@ fn cli_run_search(args: &Args) -> Result<FileMatches, String> {
         }
     };
 
-    Ok(busca::FileMatches(file_match_vec))
+    Ok(file_match_vec)
 }
 
 #[cfg(test)]
@@ -338,7 +339,7 @@ mod test_cli_run_search {
     fn normal_search() {
         let valid_args = get_valid_args();
 
-        let expected = busca::FileMatches(vec![
+        let expected = vec![
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
                 percent_match: 1.0,
@@ -349,7 +350,7 @@ mod test_cli_run_search {
                 percent_match: 2.0 / 9.0,
                 lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
-        ]);
+        ];
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
 
@@ -358,12 +359,12 @@ mod test_cli_run_search {
         let mut valid_args = get_valid_args();
         valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
 
-        let expected = busca::FileMatches(vec![FileMatch {
+        let expected = vec![FileMatch {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
             percent_match: 0.0,
             lines: fs::read_to_string("sample_dir_hello_world/nested_dir/sample_json.json")
                 .unwrap(),
-        }]);
+        }];
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
 
@@ -372,7 +373,7 @@ mod test_cli_run_search {
         let mut valid_args = get_valid_args();
         valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
 
-        let expected = busca::FileMatches(vec![
+        let expected = vec![
             FileMatch {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
                 percent_match: 1.0,
@@ -383,7 +384,7 @@ mod test_cli_run_search {
                 percent_match: 2.0 / 9.0,
                 lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
-        ]);
+        ];
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
 }
