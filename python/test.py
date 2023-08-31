@@ -112,23 +112,5 @@ class TestSearchDuration(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # unittest.main()
-    # example_usage()
-
-    # search_path = "./sample_dir_mix"
-    search_path = "./"
-
-    reference_file_path = "./sample_dir_hello_world/file_1.py"
-    with open(reference_file_path, "r") as file:
-        reference_string = file.read()
-
-    # Perform search with required parameters
-    all_file_matches = busca.search_for_lines(reference_string, search_path, max_lines=10_000)
-
-    with open("./sample_dir_hello_world/file_2.py", "r") as file:
-        reference_string_2 = file.read()
-    _ = busca.search_for_lines(reference_string_2, search_path, max_lines=10_000)
-
-    with open("./sample_dir_hello_world/file_3.py", "r") as file:
-        reference_string_3 = file.read()
-    _ = busca.search_for_lines(reference_string_3, search_path, max_lines=10_000)
+    unittest.main()
+    example_usage()
