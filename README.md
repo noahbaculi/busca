@@ -3,11 +3,11 @@
 [![CICD](https://github.com/noahbaculi/busca/actions/workflows/cicd.yml/badge.svg)](https://github.com/noahbaculi/busca/actions/workflows/cicd.yml)
 [![PyPI version](https://badge.fury.io/py/busca-py.svg)](https://badge.fury.io/py/busca-py)
 
-<img src="https://raw.githubusercontent.com/noahbaculi/busca/python_package/documentation/logo.png" alt="busca logo" width="200">
+<img src="https://github.com/noahbaculi/busca/assets/49008873/443ead58-ff6f-4e16-982d-ba57096a6068" alt="busca logo" width="200">
 
 CLI and library to search for files with content that most closely match the lines of a reference string.
 
-![Busca Demo](https://raw.githubusercontent.com/noahbaculi/busca/python_package/documentation/Demo_Recording.gif)
+![Busca Demo](https://github.com/noahbaculi/busca/assets/49008873/dbb40dc1-427e-4d55-839b-31e8c287bc43)
 
 ## Table of Contents
 
