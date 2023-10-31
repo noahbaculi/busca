@@ -1,5 +1,4 @@
 use glob::Pattern;
-use memoize::memoize;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -327,7 +326,6 @@ pub fn compare_file(comp_path: PathBuf, args: &Args, ref_lines: &str) -> Option<
     })
 }
 
-#[memoize]
 fn read_file(comp_path: PathBuf) -> Option<String> {
     let comp_reader = fs::read_to_string(comp_path);
     let comp_lines = match comp_reader {
@@ -339,10 +337,6 @@ fn read_file(comp_path: PathBuf) -> Option<String> {
     };
     Some(comp_lines)
 }
-
-// pub fn flush_read_file_cache() {
-//     memoized_flush_read_file()
-// }
 
 /// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
 ///
