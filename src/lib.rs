@@ -1,5 +1,4 @@
 use glob::Pattern;
-use memoize::memoize;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -327,7 +326,6 @@ pub fn compare_file(comp_path: PathBuf, args: &Args, ref_lines: &str) -> Option<
     })
 }
 
-#[memoize]
 fn read_file(comp_path: PathBuf) -> Option<String> {
     let comp_reader = fs::read_to_string(comp_path);
     let comp_lines = match comp_reader {
@@ -338,6 +336,32 @@ fn read_file(comp_path: PathBuf) -> Option<String> {
         },
     };
     Some(comp_lines)
+}
+
+/// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
+///
+///
+/// # Examples
+///
+/// ```
+/// //                ✓   ✓  x   ✓   x      = 3
+/// let ref_lines = "12\n14\n5\n17\n19\n";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 3.0 / 7.0);
+/// ```
+/// ---
+/// ```
+/// //                ✓   ✓  x   x    = 2 / 4 = 0.5
+/// let ref_lines = "12\n14\n5\n17";
+/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
+/// assert_eq!(result, 4.0 / 13.0);
+/// ```
+///
+pub fn get_percent_matching_lines(ref_lines: &str, comp_lines: &str) -> f32 {
+    let diff = TextDiff::from_lines(ref_lines, comp_lines);
+    diff.ratio()
 }
 
 #[cfg(test)]
@@ -470,30 +494,4 @@ mod test_compare_file {
 
         assert_eq!(file_comparison, None);
     }
-}
-
-/// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
-///
-///
-/// # Examples
-///
-/// ```
-/// //                ✓   ✓  x   ✓   x      = 3
-/// let ref_lines = "12\n14\n5\n17\n19\n";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 3.0 / 7.0);
-/// ```
-/// ---
-/// ```
-/// //                ✓   ✓  x   x    = 2 / 4 = 0.5
-/// let ref_lines = "12\n14\n5\n17";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
-/// assert_eq!(result, 4.0 / 13.0);
-/// ```
-///
-pub fn get_percent_matching_lines(ref_lines: &str, comp_lines: &str) -> f32 {
-    let diff = TextDiff::from_lines(ref_lines, comp_lines);
-    diff.ratio()
 }
