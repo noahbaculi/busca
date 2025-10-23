@@ -58,12 +58,12 @@ impl FileMatch {
 ///         lines: std::fs::read_to_string("sample-comprehensive/projects/chatbot/bot.py").unwrap(),
 ///     },
 /// ];
-
+///
 /// let expected_output = "\
 /// sample-comprehensive/projects/Geocoding/geocoding.py                  ++++++++++  98.5%
 /// sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py  +++         34.8%
 /// sample-comprehensive/projects/chatbot/bot.py                          +            5.2%";
-
+///
 /// assert_eq!(busca::format_file_matches(&file_matches), expected_output);
 /// ```
 ///
@@ -278,37 +278,28 @@ pub fn compare_file(comp_path: PathBuf, args: &Args, ref_lines: &str) -> Option<
     }
 
     // Skip paths that do not contain the include glob pattern
-    match &args.include_patterns {
-        Some(include_pattern_vec) => {
-            let contains_glob_pattern = include_pattern_vec
-                .par_iter()
-                .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
+    if let Some(include_pattern_vec) = &args.include_patterns {
+        let contains_glob_pattern = include_pattern_vec
+            .par_iter()
+            .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
 
-            if !contains_glob_pattern {
-                return None;
-            }
+        if !contains_glob_pattern {
+            return None;
         }
-        None => {}
     };
 
     // Skip paths that contain the exclude glob pattern
-    match &args.exclude_patterns {
-        Some(exclude_pattern_vec) => {
-            let contains_glob_pattern = exclude_pattern_vec
-                .par_iter()
-                .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
+    if let Some(exclude_pattern_vec) = &args.exclude_patterns {
+        let contains_glob_pattern = exclude_pattern_vec
+            .par_iter()
+            .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
 
-            if contains_glob_pattern {
-                return None;
-            }
+        if contains_glob_pattern {
+            return None;
         }
-        None => (),
     };
 
-    let comp_lines = match read_file(comp_path.clone()) {
-        Some(value) => value,
-        None => return None,
-    };
+    let comp_lines = read_file(comp_path.clone())?;
 
     if let Some(max_lines) = args.max_lines {
         let num_comp_lines = comp_lines.lines().count();
