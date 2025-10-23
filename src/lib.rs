@@ -101,46 +101,6 @@ pub fn format_file_matches(file_matches: &[FileMatch]) -> String {
     display_string
 }
 
-#[pyfunction]
-fn search_for_lines(
-    reference_string: String,
-    search_path: PathBuf,
-    max_lines: Option<usize>,
-    count: Option<usize>,
-    include_globs: Option<Vec<String>>,
-    exclude_globs: Option<Vec<String>>,
-) -> PyResult<Vec<FileMatch>> {
-    let include_patterns: Option<Vec<Pattern>> = include_globs.map(|include_substring_vec| {
-        include_substring_vec
-            .iter()
-            .map(|include_substring| parse_glob_pattern(include_substring))
-            .collect()
-    });
-
-    let exclude_patterns: Option<Vec<Pattern>> = exclude_globs.map(|exclude_substring_vec| {
-        exclude_substring_vec
-            .iter()
-            .map(|exclude_substring| parse_glob_pattern(exclude_substring))
-            .collect()
-    });
-
-    let args = Args {
-        reference_string,
-        search_path,
-        max_lines,
-        include_patterns,
-        exclude_patterns,
-        count,
-    };
-
-    let file_matches = match run_search(&args) {
-        Ok(file_matches) => file_matches,
-        Err(err) => return Err(PyValueError::new_err(err)),
-    };
-
-    Ok(file_matches)
-}
-
 pub fn parse_glob_pattern(pattern_string: &str) -> Pattern {
     match glob::Pattern::new(pattern_string) {
         Ok(pattern) => pattern,
@@ -151,11 +111,51 @@ pub fn parse_glob_pattern(pattern_string: &str) -> Pattern {
 /// A Python module of the Rust `busca` file matching library.
 /// https://github.com/noahbaculi/busca
 #[pymodule]
-#[pyo3(name = "busca_py")]
-fn python_module(_py: Python<'_>, module: &PyModule) -> PyResult<()> {
-    module.add_class::<FileMatch>()?;
-    module.add_function(wrap_pyfunction!(search_for_lines, module)?)?;
-    Ok(())
+mod busca_py {
+    use super::*;
+
+    #[pymodule_export]
+    use super::FileMatch;
+
+    #[pyfunction]
+    fn search_for_lines(
+        reference_string: String,
+        search_path: PathBuf,
+        max_lines: Option<usize>,
+        count: Option<usize>,
+        include_globs: Option<Vec<String>>,
+        exclude_globs: Option<Vec<String>>,
+    ) -> PyResult<Vec<FileMatch>> {
+        let include_patterns: Option<Vec<Pattern>> = include_globs.map(|include_substring_vec| {
+            include_substring_vec
+                .iter()
+                .map(|include_substring| parse_glob_pattern(include_substring))
+                .collect()
+        });
+
+        let exclude_patterns: Option<Vec<Pattern>> = exclude_globs.map(|exclude_substring_vec| {
+            exclude_substring_vec
+                .iter()
+                .map(|exclude_substring| parse_glob_pattern(exclude_substring))
+                .collect()
+        });
+
+        let args = Args {
+            reference_string,
+            search_path,
+            max_lines,
+            include_patterns,
+            exclude_patterns,
+            count,
+        };
+
+        let file_matches = match run_search(&args) {
+            Ok(file_matches) => file_matches,
+            Err(err) => return Err(PyValueError::new_err(err)),
+        };
+
+        Ok(file_matches)
+    }
 }
 
 #[derive(Debug, PartialEq)]
