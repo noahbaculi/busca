@@ -37,6 +37,7 @@ pip install busca_py
 ```
 
 ```python
+from pathlib import Path
 import busca_py as busca
 
 
@@ -52,7 +53,7 @@ all_file_matches = busca.search_for_lines(
 
 # File matches are returned in descending order of percent match
 closest_file_match = all_file_matches[0]
-assert closest_file_match.path == reference_file_path
+assert closest_file_match.path == Path(reference_file_path)
 assert closest_file_match.percent_match == 1.0
 assert closest_file_match.lines == reference_string
 
@@ -140,7 +141,7 @@ busca --ref-file-path path_to_reference.json
 busca --ref-file-path path_to_reference.json --include-glob '*.json' --include-glob '**foo**' --max-lines 1000
 ```
 
-- [Glob reference](https://en.wikipedia.org/wiki/Glob_(programming))
+- [Glob reference](<https://en.wikipedia.org/wiki/Glob_(programming)>)
 
 ##### Piped input mode to search the output of a command
 
@@ -156,12 +157,12 @@ echo 'String to find in files.' | busca
 
 This can be worked around by adding the following aliases to your shell `.bashrc` or `.zshrc` file:
 
->   ```bash
->   # Wrap commands for busca search
->   busca_cmd_output() {
->       eval "$* > /tmp/busca_search.tmp" && busca -r /tmp/busca_search.tmp
->   }
->   ```
+> ```bash
+> # Wrap commands for busca search
+> busca_cmd_output() {
+>     eval "$* > /tmp/busca_search.tmp" && busca -r /tmp/busca_search.tmp
+> }
+> ```
 
 One-liners to add the wrapper function:
 
@@ -207,12 +208,12 @@ brew upgrade busca
 
 2. In the root of this repo, run
 
-    ```shell
-    cargo build --release
-    ```
+   ```shell
+   cargo build --release
+   ```
 
 3. Add to path. For example, by copying the compiled binary to your local bin directory.
 
-    ```shell
-    cp target/release/busca $HOME/bin/
-    ```
+   ```shell
+   cp target/release/busca $HOME/bin/
+   ```

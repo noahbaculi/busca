@@ -19,7 +19,7 @@ def example_usage():
 
     # File matches are returned in descending order of percent match
     closest_file_match: busca.FileMatch = all_file_matches[0]
-    assert closest_file_match.path == reference_file_path
+    assert closest_file_match.path == Path(reference_file_path)
     assert closest_file_match.percent_match == 1.0
     assert closest_file_match.lines == reference_string
 
@@ -80,7 +80,7 @@ class TestSearchResults(unittest.TestCase):
 
         self.assertEqual(
             file_match.path,
-            "./sample_dir_hello_world/nested_dir/sample_python_file_3.py",
+            Path("./sample_dir_hello_world/nested_dir/sample_python_file_3.py"),
         )
         self.assertEqual(file_match.percent_match, 0.4285714328289032)
         self.assertEqual(file_match.lines, expected_lines)
