@@ -118,6 +118,14 @@ mod busca_py {
     use super::FileMatch;
 
     #[pyfunction]
+    #[pyo3(signature = (
+        reference_string,
+        search_path,
+        max_lines=None,
+        count=None,
+        include_globs=None,
+        exclude_globs=None
+    ))]
     fn search_for_lines(
         reference_string: String,
         search_path: PathBuf,
