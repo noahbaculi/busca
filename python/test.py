@@ -1,5 +1,6 @@
 import inspect
 import unittest
+from pathlib import Path
 from time import perf_counter
 
 import busca_py as busca
@@ -68,7 +69,7 @@ class TestSearchResults(unittest.TestCase):
 
         expected_lines = 'print("Hello World 1")\nprint("Hello World 2")\n\n\nprint("Hello World 3")\nprint("Hello World 4")\n\nprint("Hello World 5")\nprint("Hello World 6")'
 
-        self.assertEqual(file_match.path, "./sample_dir_hello_world/file_1.py")
+        self.assertEqual(file_match.path, Path("./sample_dir_hello_world/file_1.py"))
         self.assertEqual(file_match.percent_match, 1.0)
         self.assertEqual(file_match.lines, expected_lines)
 
@@ -77,7 +78,10 @@ class TestSearchResults(unittest.TestCase):
 
         expected_lines = '\n\nprint("Hello World 1")\n\nprint("Hello World 3")\n'
 
-        self.assertEqual(file_match.path, "./sample_dir_hello_world/nested_dir/sample_python_file_3.py")
+        self.assertEqual(
+            file_match.path,
+            "./sample_dir_hello_world/nested_dir/sample_python_file_3.py",
+        )
         self.assertEqual(file_match.percent_match, 0.4285714328289032)
         self.assertEqual(file_match.lines, expected_lines)
 
