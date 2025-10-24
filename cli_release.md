@@ -46,7 +46,8 @@ shasum -a 256 busca-mac.tar.gz   # --> __sha_for_tar__
 cd -
 ```
 
-Add GitHub release with the version number and release notes. Copy the URL of the TAR archive for later use (`__link_to_tar_in_the_github_release__`).
+Add GitHub release with the version number and release notes. Upload the generated `busca-mac.tar.gz` file in the `target/apple-darwin-universal/release/` directory.
+Once published, copy the URL of the TAR archive for later use with the Homebrew Tap (`__link_to_tar_in_the_github_release__`).
 
 > ex: <https://github.com/noahbaculi/busca/releases/download/v0.1.1/busca-mac.tar.gz>
 
