@@ -482,6 +482,55 @@ mod test_cli_run_search {
         let unfiltered = apply_min_similarity_ratio(input, None);
         assert_eq!(unfiltered.len(), 3);
     }
+
+    #[test]
+    fn sort_then_filter_then_truncate_pipeline() {
+        let args = Args::new(
+            fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+            PathBuf::from("sample_dir_hello_world"),
+            Some(5000),
+            None,
+            vec!["*.py".into()],
+            vec![],
+        )
+        .unwrap();
+
+        let raw = cli_run_search(&args).unwrap();
+        for pair in raw.windows(2) {
+            assert!(
+                pair[0].similarity_ratio >= pair[1].similarity_ratio,
+                "cli_run_search must return descending ratios, got {:?} then {:?}",
+                pair[0].similarity_ratio,
+                pair[1].similarity_ratio,
+            );
+        }
+
+        let threshold = 0.25_f32;
+        let user_count = 1_usize;
+        let mut filtered = apply_min_similarity_ratio(raw.clone(), Some(threshold));
+        filtered.truncate(user_count);
+
+        assert!(filtered.len() <= user_count);
+        for c in &filtered {
+            assert!(
+                c.similarity_ratio >= threshold,
+                "{} = {} < {}",
+                c.path.display(),
+                c.similarity_ratio,
+                threshold,
+            );
+        }
+        let expected_full: Vec<_> = raw
+            .iter()
+            .filter(|c| c.similarity_ratio >= threshold)
+            .take(user_count)
+            .cloned()
+            .collect();
+        assert_eq!(filtered, expected_full);
+
+        let none_left = apply_min_similarity_ratio(raw.clone(), Some(1.0001));
+        assert!(none_left.is_empty(), "threshold >1 must filter everything");
+    }
 }
 
 #[cfg(test)]
