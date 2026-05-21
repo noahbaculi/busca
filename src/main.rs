@@ -285,7 +285,8 @@ fn get_piped_input() -> Result<String, String> {
 
 /// If the current stdin is a TTY (interactive)
 fn interactive_input_mode() -> bool {
-    atty::is(atty::Stream::Stdin)
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal()
 }
 
 fn cli_run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
