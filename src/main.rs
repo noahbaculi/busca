@@ -1,5 +1,5 @@
-use busca::format_file_matches;
-use busca::{compare_files, parse_glob_pattern, Args, FileMatch};
+use busca::format_file_comparisons;
+use busca::{compare_files, parse_glob_pattern, Args, FileComparison};
 use clap::Parser;
 use console::{style, Style};
 use indicatif::{ParallelProgressIterator, ProgressStyle};
@@ -26,13 +26,13 @@ fn main() {
         Err(err_str) => graceful_panic(&err_str),
     };
 
-    let file_matches = match cli_run_search(&args) {
+    let file_comparisons = match cli_run_search(&args) {
         Ok(search_results) => search_results,
         Err(_) => todo!(),
     };
 
-    let file_matches_output = format_file_matches(&file_matches);
-    let grid_options: Vec<&str> = file_matches_output.split('\n').collect();
+    let file_comparisons_output = format_file_comparisons(&file_comparisons);
+    let grid_options: Vec<&str> = file_comparisons_output.split('\n').collect();
 
     if grid_options.is_empty() {
         println!("No files found that match the criteria.");
@@ -40,7 +40,7 @@ fn main() {
     }
 
     if !interactive_input_mode() {
-        println!("{}", file_matches_output);
+        println!("{}", file_comparisons_output);
         println!("\nNote: Interactive prompt is not supported in this mode.");
         return;
     }
@@ -54,13 +54,13 @@ fn main() {
         Err(err) => graceful_panic(&err.to_string()),
     };
 
-    let selected_file_match = &file_matches[ans.index];
-    let selected_file_match_path = &selected_file_match.path;
-    let comp_lines = match fs::read_to_string(selected_file_match_path) {
-        Ok(comp_lines) => comp_lines,
+    let selected_file_comparison = &file_comparisons[ans.index];
+    let selected_file_comparison_path = &selected_file_comparison.path;
+    let candidate_content = match fs::read_to_string(selected_file_comparison_path) {
+        Ok(candidate_content) => candidate_content,
         Err(err) => graceful_panic(&err.to_string()),
     };
-    output_detailed_diff(&args.reference_string, &comp_lines);
+    output_detailed_diff(&args.reference_string, &candidate_content);
 }
 
 /// Simple utility to search for files with content that most closely match the lines of a reference string.
@@ -79,10 +79,10 @@ struct InputArgs {
     #[arg(short, long)]
     search_path: Option<PathBuf>,
 
-    /// The number of lines to consider when comparing files. Files with more
-    /// lines will be skipped.
+    /// The maximum number of lines a candidate file may have. Candidates with
+    /// more lines (or zero lines) are skipped entirely.
     #[arg(short, long, default_value_t = 10_000)]
-    max_lines: usize,
+    max_file_lines: usize,
 
     /// Globs that qualify a file for comparison
     #[arg(short, long)]
@@ -135,27 +135,27 @@ impl InputArgs {
         }
 
         // Parse the include glob patterns from input args strings
-        let include_patterns = self.include_glob.map(|include_substring_vec| {
-            include_substring_vec
+        let include_glob = self.include_glob.map(|globs| {
+            globs
                 .iter()
-                .map(|include_substring| parse_glob_pattern(include_substring))
+                .map(|glob| parse_glob_pattern(glob))
                 .collect()
         });
 
         // Parse the exclude glob patterns from input args strings
-        let exclude_patterns = self.exclude_glob.map(|exclude_substring_vec| {
-            exclude_substring_vec
+        let exclude_glob = self.exclude_glob.map(|globs| {
+            globs
                 .iter()
-                .map(|exclude_substring| parse_glob_pattern(exclude_substring))
+                .map(|glob| parse_glob_pattern(glob))
                 .collect()
         });
 
         Ok(Args {
             reference_string,
             search_path,
-            max_lines: Some(self.max_lines),
-            include_patterns,
-            exclude_patterns,
+            max_file_lines: Some(self.max_file_lines),
+            include_glob,
+            exclude_glob,
             count: Some(self.count),
         })
     }
@@ -170,9 +170,9 @@ mod test_input_args_validation {
         Args {
             reference_string: fs::read_to_string("sample_dir_hello_world/file_3.py").unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: Some(5000),
-            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
-            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
+            max_file_lines: Some(5000),
+            include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_glob: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(8),
         }
     }
@@ -185,7 +185,7 @@ mod test_input_args_validation {
         let input_args = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(valid_args.search_path.clone()),
-            max_lines: valid_args.max_lines.unwrap(),
+            max_file_lines: valid_args.max_file_lines.unwrap(),
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
@@ -195,9 +195,9 @@ mod test_input_args_validation {
             Ok(Args {
                 reference_string: valid_args.reference_string,
                 search_path: valid_args.search_path.clone(),
-                max_lines: valid_args.max_lines,
-                include_patterns: valid_args.include_patterns.clone(),
-                exclude_patterns: valid_args.exclude_patterns.clone(),
+                max_file_lines: valid_args.max_file_lines,
+                include_glob: valid_args.include_glob.clone(),
+                exclude_glob: valid_args.exclude_glob.clone(),
                 count: valid_args.count,
             })
         );
@@ -209,7 +209,7 @@ mod test_input_args_validation {
         let input_args = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: None,
-            max_lines: valid_args.max_lines.unwrap(),
+            max_file_lines: valid_args.max_file_lines.unwrap(),
             include_glob: None,
             exclude_glob: None,
             count: valid_args.count.unwrap(),
@@ -219,9 +219,9 @@ mod test_input_args_validation {
             Ok(Args {
                 reference_string: valid_args.reference_string,
                 search_path: env::current_dir().unwrap(),
-                max_lines: valid_args.max_lines,
-                include_patterns: None,
-                exclude_patterns: None,
+                max_file_lines: valid_args.max_file_lines,
+                include_glob: None,
+                exclude_glob: None,
                 count: valid_args.count,
             })
         );
@@ -233,7 +233,7 @@ mod test_input_args_validation {
         let input_args_wrong_ref_file = InputArgs {
             ref_file_path: Some(PathBuf::from("nonexistent_path")),
             search_path: Some(valid_args.search_path.clone()),
-            max_lines: valid_args.max_lines.unwrap(),
+            max_file_lines: valid_args.max_file_lines.unwrap(),
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
@@ -250,7 +250,7 @@ mod test_input_args_validation {
         let input_args_wrong_ref_file = InputArgs {
             ref_file_path: Some(PathBuf::from("sample_dir_hello_world/file_3.py")),
             search_path: Some(PathBuf::from("nonexistent_path")),
-            max_lines: valid_args.max_lines.unwrap(),
+            max_file_lines: valid_args.max_file_lines.unwrap(),
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
@@ -288,7 +288,7 @@ fn interactive_input_mode() -> bool {
     atty::is(atty::Stream::Stdin)
 }
 
-fn cli_run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
+fn cli_run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
     // Create progress bar style
     let progress_bar_style_result = ProgressStyle::with_template(
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
@@ -298,7 +298,7 @@ fn cli_run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
         .into_iter()
         .collect::<Vec<_>>();
 
-    let file_match_vec: Vec<FileMatch> = match progress_bar_style_result {
+    let file_comparisons: Vec<FileComparison> = match progress_bar_style_result {
         Ok(progress_bar_style) => compare_files(
             walkdir_vec
                 .into_par_iter()
@@ -315,11 +315,11 @@ fn cli_run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
         }
     };
 
-    Ok(file_match_vec)
+    Ok(file_comparisons)
 }
 
-fn output_detailed_diff(ref_lines: &str, comp_lines: &str) {
-    let diff = TextDiff::from_lines(ref_lines, comp_lines);
+fn output_detailed_diff(reference_string: &str, candidate_content: &str) {
+    let diff = TextDiff::from_lines(reference_string, candidate_content);
 
     let grouped_operations = diff.grouped_ops(3);
 
@@ -381,9 +381,9 @@ mod test_cli_run_search {
             reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
                 .unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: Some(5000),
-            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
-            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
+            max_file_lines: Some(5000),
+            include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_glob: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(2),
         }
     }
@@ -393,15 +393,15 @@ mod test_cli_run_search {
         let valid_args = get_valid_args();
 
         let expected = vec![
-            FileMatch {
+            FileComparison {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                percent_match: 1.0,
-                lines: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+                similarity_ratio: 1.0,
+                content: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
             },
-            FileMatch {
+            FileComparison {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                percent_match: 2.0 / 9.0,
-                lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
+                similarity_ratio: 2.0 / 9.0,
+                content: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
         ];
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
@@ -410,12 +410,12 @@ mod test_cli_run_search {
     #[test]
     fn include_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+        valid_args.include_glob = Some(vec![Pattern::new("*.json").unwrap()]);
 
-        let expected = vec![FileMatch {
+        let expected = vec![FileComparison {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
-            percent_match: 0.0,
-            lines: fs::read_to_string("sample_dir_hello_world/nested_dir/sample_json.json")
+            similarity_ratio: 0.0,
+            content: fs::read_to_string("sample_dir_hello_world/nested_dir/sample_json.json")
                 .unwrap(),
         }];
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
@@ -424,18 +424,18 @@ mod test_cli_run_search {
     #[test]
     fn exclude_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+        valid_args.exclude_glob = Some(vec![Pattern::new("*.json").unwrap()]);
 
         let expected = vec![
-            FileMatch {
+            FileComparison {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                percent_match: 1.0,
-                lines: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+                similarity_ratio: 1.0,
+                content: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
             },
-            FileMatch {
+            FileComparison {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                percent_match: 2.0 / 9.0,
-                lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
+                similarity_ratio: 2.0 / 9.0,
+                content: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
         ];
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);

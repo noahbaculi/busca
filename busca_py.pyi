@@ -1,31 +1,36 @@
 from typing import Optional
 
-class FileMatch:
+class FileComparison:
     """
-    Data structure to represent a file's match to the reference string lines. It has three attributes:
-    ...
+    The result of scoring one candidate file against the reference string.
 
     Attributes
     ----------
     path : str
-        a string of the path to the file
-    percent_match : float
-        the ratio of line similarity between the sequences
-    lines : str
-        the contents of the file
+        Path to the candidate file.
+    similarity_ratio : float
+        `similar::TextDiff::ratio()` between the reference and the candidate,
+        a Ratcliff/Obershelp similarity in [0.0, 1.0] over the line sequences.
+        See ADR-0001.
+    content : str
+        Full contents of the candidate file.
     """
 
     path: str
-    percent_match: float
-    lines: str
-    def __new__(cls, path: str, percent_match: float, lines: str) -> FileMatch: ...
+    similarity_ratio: float
+    content: str
+    def __new__(
+        cls, path: str, similarity_ratio: float, content: str
+    ) -> FileComparison: ...
 
-def search_for_lines(
+def search(
     reference_string: str,
     search_path: str,
-    max_lines: Optional[int] = None,
+    max_file_lines: Optional[int] = None,
     count: Optional[int] = None,
-    include_globs: Optional[list[str]] = None,
-    exclude_globs: Optional[list[str]] = None,
-) -> list[FileMatch]:
-    """Search for files with content that most closely match the lines of a reference string."""
+    include_glob: Optional[list[str]] = None,
+    exclude_glob: Optional[list[str]] = None,
+) -> list[FileComparison]:
+    """Walk `search_path` and return a `FileComparison` for each candidate that
+    survives the include/exclude globs and `max_file_lines` filter, ranked by
+    descending `similarity_ratio`."""

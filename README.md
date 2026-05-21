@@ -45,32 +45,32 @@ reference_file_path = "./sample_dir_hello_world/file_1.py"
 with open(reference_file_path, "r") as file:
     reference_string = file.read()
 
-# Perform search with required parameters
-all_file_matches = busca.search_for_lines(
+# Perform a search with required parameters
+all_file_comparisons = busca.search(
     reference_string=reference_string,
     search_path="./sample_dir_hello_world",
 )
 
-# File matches are returned in descending order of percent match
-closest_file_match = all_file_matches[0]
-assert closest_file_match.path == Path(reference_file_path)
-assert closest_file_match.percent_match == 1.0
-assert closest_file_match.lines == reference_string
+# Comparisons are returned in descending order of similarity_ratio
+closest_file_comparison = all_file_comparisons[0]
+assert closest_file_comparison.path == Path(reference_file_path)
+assert closest_file_comparison.similarity_ratio == 1.0
+assert closest_file_comparison.content == reference_string
 
-# Perform search for top 5 matches with additional filters
+# Perform a search for the top 5 comparisons with additional filters
 # to speed up runtime by skipping files that will not match
-relevant_file_matches = busca.search_for_lines(
+relevant_file_comparisons = busca.search(
     reference_string=reference_string,
     search_path="./sample_dir_hello_world",
-    max_lines=10_000,
-    include_globs=["*.py"],
+    max_file_lines=10_000,
+    include_glob=["*.py"],
     count=5,
 )
 
-assert len(relevant_file_matches) < len(all_file_matches)
+assert len(relevant_file_comparisons) < len(all_file_comparisons)
 
-# Create new file match object
-new_file_match = busca.FileMatch("file/path", 1.0, "file\ncontent")
+# Create a new FileComparison object
+new_file_comparison = busca.FileComparison("file/path", 1.0, "file\ncontent")
 ```
 
 ## Command Line Interface
@@ -83,7 +83,7 @@ new_file_match = busca.FileMatch("file/path", 1.0, "file\ncontent")
 busca -h
 ```
 
-Output for v2.1.3
+Output for v3.0.0
 
 ```text
 Simple utility to search for files with content that most closely match the lines of a reference string
@@ -92,14 +92,14 @@ Usage: busca --ref-file-path <REF_FILE_PATH> [OPTIONS]
        <SomeCommand> | busca [OPTIONS]
 
 Options:
-  -r, --ref-file-path <REF_FILE_PATH>  Local or absolute path to the reference comparison file. Overrides any piped input
-  -s, --search-path <SEARCH_PATH>      Directory or file in which to search. Defaults to CWD
-  -m, --max-lines <MAX_LINES>          The number of lines to consider when comparing files. Files with more lines will be skipped [default: 10000]
-  -i, --include-glob <INCLUDE_GLOB>    Globs that qualify a file for comparison
-  -x, --exclude-glob <EXCLUDE_GLOB>    Globs that disqualify a file from comparison
-  -c, --count <COUNT>                  Number of results to display [default: 10]
-  -h, --help                           Print help
-  -V, --version                        Print version
+  -r, --ref-file-path <REF_FILE_PATH>      Local or absolute path to the reference comparison file. Overrides any piped input
+  -s, --search-path <SEARCH_PATH>          Directory or file in which to search. Defaults to CWD
+  -m, --max-file-lines <MAX_FILE_LINES>    The maximum number of lines a candidate file may have. Candidates with more lines (or zero lines) are skipped entirely [default: 10000]
+  -i, --include-glob <INCLUDE_GLOB>        Globs that qualify a file for comparison
+  -x, --exclude-glob <EXCLUDE_GLOB>        Globs that disqualify a file from comparison
+  -c, --count <COUNT>                      Number of results to display [default: 10]
+  -h, --help                               Print help
+  -V, --version                            Print version
 ```
 
 #### Examples
@@ -138,7 +138,7 @@ busca --ref-file-path path_to_reference.json
 ##### Narrow search to only consider `.json` files whose paths include the substring "foo" and that contain fewer than 1,000 lines
 
 ```shell
-busca --ref-file-path path_to_reference.json --include-glob '*.json' --include-glob '**foo**' --max-lines 1000
+busca --ref-file-path path_to_reference.json --include-glob '*.json' --include-glob '**foo**' --max-file-lines 1000
 ```
 
 - [Glob reference](<https://en.wikipedia.org/wiki/Glob_(programming)>)
@@ -153,7 +153,7 @@ echo 'String to find in files.' | busca
 <details style="margin-bottom: 2em">
 <summary><h5>MacOS piped input mode<h4></summary>
 
-📝 There is an [open issue](https://github.com/crossterm-rs/crossterm/issues/396) for MacOS in [`crossterm`](https://github.com/crossterm-rs/crossterm), one of busca's dependencies, that does not allow prompt interactivity when using piped input. Therefore, when a non interactive mode is detected, the file matches will be displayed but not interactively.
+📝 There is an [open issue](https://github.com/crossterm-rs/crossterm/issues/396) for MacOS in [`crossterm`](https://github.com/crossterm-rs/crossterm), one of busca's dependencies, that does not allow prompt interactivity when using piped input. Therefore, when a non interactive mode is detected, the file comparisons will be displayed but not interactively.
 
 This can be worked around by adding the following aliases to your shell `.bashrc` or `.zshrc` file:
 

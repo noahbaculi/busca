@@ -11,19 +11,19 @@ use walkdir::{DirEntry, Error, WalkDir};
 
 #[pyclass(get_all)]
 #[derive(Debug, Clone, PartialEq)]
-pub struct FileMatch {
+pub struct FileComparison {
     pub path: PathBuf,
-    pub percent_match: f32,
-    pub lines: String,
+    pub similarity_ratio: f32,
+    pub content: String,
 }
 #[pymethods]
-impl FileMatch {
+impl FileComparison {
     #[new]
-    fn new(path: PathBuf, percent_match: f32, lines: String) -> Self {
+    fn new(path: PathBuf, similarity_ratio: f32, content: String) -> Self {
         Self {
             path,
-            percent_match,
-            lines,
+            similarity_ratio,
+            content,
         }
     }
     fn __repr__(&self) -> String {
@@ -31,31 +31,31 @@ impl FileMatch {
     }
 }
 
-/// Returns a formatted string with one file match per line with path
-/// string, visualization, and match percentage.
+/// Returns a formatted string with one comparison per line: path, a bar
+/// visualization of the similarity ratio, and the ratio as a percentage.
 ///
 /// # Examples
 ///
 /// ```
-/// let file_matches = vec![
-///     busca::FileMatch {
+/// let file_comparisons = vec![
+///     busca::FileComparison {
 ///         path: std::path::PathBuf::from("sample-comprehensive/projects/Geocoding/geocoding.py"),
-///         percent_match: 0.9846,
-///         lines: std::fs::read_to_string("sample-comprehensive/projects/Geocoding/geocoding.py").unwrap(),
+///         similarity_ratio: 0.9846,
+///         content: std::fs::read_to_string("sample-comprehensive/projects/Geocoding/geocoding.py").unwrap(),
 ///     },
-///     busca::FileMatch {
+///     busca::FileComparison {
 ///         path: std::path::PathBuf::from(
 ///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
 ///         ),
-///         percent_match: 0.3481,
-///         lines: std::fs::read_to_string(
+///         similarity_ratio: 0.3481,
+///         content: std::fs::read_to_string(
 ///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
 ///         ).unwrap(),
 ///     },
-///     busca::FileMatch {
+///     busca::FileComparison {
 ///         path: std::path::PathBuf::from("sample-comprehensive/projects/chatbot/bot.py"),
-///         percent_match: 0.0521,
-///         lines: std::fs::read_to_string("sample-comprehensive/projects/chatbot/bot.py").unwrap(),
+///         similarity_ratio: 0.0521,
+///         content: std::fs::read_to_string("sample-comprehensive/projects/chatbot/bot.py").unwrap(),
 ///     },
 /// ];
 ///
@@ -64,26 +64,26 @@ impl FileMatch {
 /// sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py  +++         34.8%
 /// sample-comprehensive/projects/chatbot/bot.py                          +            5.2%";
 ///
-/// assert_eq!(busca::format_file_matches(&file_matches), expected_output);
+/// assert_eq!(busca::format_file_comparisons(&file_comparisons), expected_output);
 /// ```
 ///
-pub fn format_file_matches(file_matches: &[FileMatch]) -> String {
+pub fn format_file_comparisons(file_comparisons: &[FileComparison]) -> String {
     let mut grid = Grid::new(GridOptions {
         filling: Filling::Spaces(2),
         direction: Direction::LeftToRight,
     });
 
-    for path_and_perc in file_matches.iter() {
+    for file_comparison in file_comparisons.iter() {
         // Add first column with the file path
-        grid.add(Cell::from(path_and_perc.path.display().to_string()));
+        grid.add(Cell::from(file_comparison.path.display().to_string()));
 
-        // Add second column with the visual indicator of the match perc
-        let visual_indicator = "+".repeat((path_and_perc.percent_match * 10.0).round() as usize);
+        // Add second column with the visual indicator of the similarity ratio
+        let visual_indicator = "+".repeat((file_comparison.similarity_ratio * 10.0).round() as usize);
         let vis_cell = Cell::from(visual_indicator);
         grid.add(vis_cell);
 
-        // Add third column with the numerical match perc
-        let perc_str = format!("{:.1}%", (path_and_perc.percent_match * 100.0));
+        // Add third column with the numerical similarity ratio
+        let perc_str = format!("{:.1}%", (file_comparison.similarity_ratio * 100.0));
         let mut perc_cell = Cell::from(perc_str);
         perc_cell.alignment = Alignment::Right;
         grid.add(perc_cell);
@@ -115,54 +115,54 @@ mod busca_py {
     use super::*;
 
     #[pymodule_export]
-    use super::FileMatch;
+    use super::FileComparison;
 
     #[pyfunction]
     #[pyo3(signature = (
         reference_string,
         search_path,
-        max_lines=None,
+        max_file_lines=None,
         count=None,
-        include_globs=None,
-        exclude_globs=None
+        include_glob=None,
+        exclude_glob=None
     ))]
-    fn search_for_lines(
+    fn search(
         reference_string: String,
         search_path: PathBuf,
-        max_lines: Option<usize>,
+        max_file_lines: Option<usize>,
         count: Option<usize>,
-        include_globs: Option<Vec<String>>,
-        exclude_globs: Option<Vec<String>>,
-    ) -> PyResult<Vec<FileMatch>> {
-        let include_patterns: Option<Vec<Pattern>> = include_globs.map(|include_substring_vec| {
-            include_substring_vec
+        include_glob: Option<Vec<String>>,
+        exclude_glob: Option<Vec<String>>,
+    ) -> PyResult<Vec<FileComparison>> {
+        let include_glob: Option<Vec<Pattern>> = include_glob.map(|globs| {
+            globs
                 .iter()
-                .map(|include_substring| parse_glob_pattern(include_substring))
+                .map(|glob| parse_glob_pattern(glob))
                 .collect()
         });
 
-        let exclude_patterns: Option<Vec<Pattern>> = exclude_globs.map(|exclude_substring_vec| {
-            exclude_substring_vec
+        let exclude_glob: Option<Vec<Pattern>> = exclude_glob.map(|globs| {
+            globs
                 .iter()
-                .map(|exclude_substring| parse_glob_pattern(exclude_substring))
+                .map(|glob| parse_glob_pattern(glob))
                 .collect()
         });
 
         let args = Args {
             reference_string,
             search_path,
-            max_lines,
-            include_patterns,
-            exclude_patterns,
+            max_file_lines,
+            include_glob,
+            exclude_glob,
             count,
         };
 
-        let file_matches = match run_search(&args) {
-            Ok(file_matches) => file_matches,
+        let file_comparisons = match run_search(&args) {
+            Ok(file_comparisons) => file_comparisons,
             Err(err) => return Err(PyValueError::new_err(err)),
         };
 
-        Ok(file_matches)
+        Ok(file_comparisons)
     }
 }
 
@@ -170,13 +170,13 @@ mod busca_py {
 pub struct Args {
     pub reference_string: String,
     pub search_path: PathBuf,
-    pub max_lines: Option<usize>,
-    pub include_patterns: Option<Vec<Pattern>>,
-    pub exclude_patterns: Option<Vec<Pattern>>,
+    pub max_file_lines: Option<usize>,
+    pub include_glob: Option<Vec<Pattern>>,
+    pub exclude_glob: Option<Vec<Pattern>>,
     pub count: Option<usize>,
 }
 
-pub fn run_search(args: &Args) -> Result<Vec<FileMatch>, String> {
+pub fn run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
     let walkdir_vec = WalkDir::new(&args.search_path)
         .into_iter()
         .collect::<Vec<_>>();
@@ -192,9 +192,9 @@ mod test_run_search {
             reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
                 .unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: Some(5000),
-            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
-            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
+            max_file_lines: Some(5000),
+            include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_glob: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(2),
         }
     }
@@ -204,15 +204,15 @@ mod test_run_search {
         let valid_args = get_valid_args();
 
         let expected = vec![
-            FileMatch {
+            FileComparison {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                percent_match: 1.0,
-                lines: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+                similarity_ratio: 1.0,
+                content: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
             },
-            FileMatch {
+            FileComparison {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                percent_match: 2.0 / 9.0,
-                lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
+                similarity_ratio: 2.0 / 9.0,
+                content: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
         ];
         assert_eq!(run_search(&valid_args).unwrap(), expected);
@@ -221,12 +221,12 @@ mod test_run_search {
     #[test]
     fn include_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+        valid_args.include_glob = Some(vec![Pattern::new("*.json").unwrap()]);
 
-        let expected = vec![FileMatch {
+        let expected = vec![FileComparison {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
-            percent_match: 0.0,
-            lines: fs::read_to_string("sample_dir_hello_world/nested_dir/sample_json.json")
+            similarity_ratio: 0.0,
+            content: fs::read_to_string("sample_dir_hello_world/nested_dir/sample_json.json")
                 .unwrap(),
         }];
         assert_eq!(run_search(&valid_args).unwrap(), expected);
@@ -235,18 +235,18 @@ mod test_run_search {
     #[test]
     fn exclude_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+        valid_args.exclude_glob = Some(vec![Pattern::new("*.json").unwrap()]);
 
         let expected = vec![
-            FileMatch {
+            FileComparison {
                 path: PathBuf::from("sample_dir_hello_world/nested_dir/ref_B.py"),
-                percent_match: 1.0,
-                lines: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+                similarity_ratio: 1.0,
+                content: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
             },
-            FileMatch {
+            FileComparison {
                 path: PathBuf::from("sample_dir_hello_world/file_1.py"),
-                percent_match: 2.0 / 9.0,
-                lines: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
+                similarity_ratio: 2.0 / 9.0,
+                content: fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
             },
         ];
         assert_eq!(run_search(&valid_args).unwrap(), expected);
@@ -256,110 +256,114 @@ mod test_run_search {
 pub fn compare_files(
     walkdir_iterator: impl ParallelIterator<Item = Result<DirEntry, Error>>,
     args: &Args,
-) -> Vec<FileMatch> {
-    let mut file_match_vec: Vec<FileMatch> = walkdir_iterator
+) -> Vec<FileComparison> {
+    let mut file_comparisons: Vec<FileComparison> = walkdir_iterator
         .filter_map(|dir_entry_result| match dir_entry_result {
             Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
             Err(_) => None,
         })
         .collect();
 
-    // Sort by percent match
-    file_match_vec.sort_by(|a, b| {
-        b.percent_match
-            .partial_cmp(&a.percent_match)
+    // Sort by similarity ratio, descending
+    file_comparisons.sort_by(|a, b| {
+        b.similarity_ratio
+            .partial_cmp(&a.similarity_ratio)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     if let Some(count) = args.count {
-        // Keep the top matches
-        file_match_vec.truncate(count);
+        // Keep the top comparisons
+        file_comparisons.truncate(count);
     }
 
-    file_match_vec
+    file_comparisons
 }
 
-pub fn compare_file(comp_path: PathBuf, args: &Args, ref_lines: &str) -> Option<FileMatch> {
+pub fn compare_file(
+    candidate_path: PathBuf,
+    args: &Args,
+    reference_string: &str,
+) -> Option<FileComparison> {
     // Skip paths that are not files
-    if !comp_path.is_file() {
+    if !candidate_path.is_file() {
         return None;
     }
 
-    // Skip paths that do not contain the include glob pattern
-    if let Some(include_pattern_vec) = &args.include_patterns {
-        let contains_glob_pattern = include_pattern_vec
+    // Skip paths that do not match any include glob
+    if let Some(include_glob) = &args.include_glob {
+        let matches_any_include = include_glob
             .par_iter()
-            .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
+            .any(|glob| glob.matches_path(candidate_path.as_path()));
 
-        if !contains_glob_pattern {
+        if !matches_any_include {
             return None;
         }
     };
 
-    // Skip paths that contain the exclude glob pattern
-    if let Some(exclude_pattern_vec) = &args.exclude_patterns {
-        let contains_glob_pattern = exclude_pattern_vec
+    // Skip paths that match any exclude glob
+    if let Some(exclude_glob) = &args.exclude_glob {
+        let matches_any_exclude = exclude_glob
             .par_iter()
-            .any(|include_pattern| include_pattern.matches_path(comp_path.as_path()));
+            .any(|glob| glob.matches_path(candidate_path.as_path()));
 
-        if contains_glob_pattern {
+        if matches_any_exclude {
             return None;
         }
     };
 
-    let comp_lines = read_file(comp_path.clone())?;
+    let candidate_content = read_file(candidate_path.clone())?;
 
-    if let Some(max_lines) = args.max_lines {
-        let num_comp_lines = comp_lines.lines().count();
-        if (num_comp_lines > max_lines) | (num_comp_lines == 0) {
+    if let Some(max_file_lines) = args.max_file_lines {
+        let num_candidate_lines = candidate_content.lines().count();
+        if (num_candidate_lines > max_file_lines) | (num_candidate_lines == 0) {
             return None;
         }
     }
 
-    let percent_match = get_percent_matching_lines(ref_lines, &comp_lines);
+    let similarity_ratio = get_similarity_ratio(reference_string, &candidate_content);
 
-    Some(FileMatch {
-        path: comp_path,
-        percent_match,
-        lines: comp_lines,
+    Some(FileComparison {
+        path: candidate_path,
+        similarity_ratio,
+        content: candidate_content,
     })
 }
 
-fn read_file(comp_path: PathBuf) -> Option<String> {
-    let comp_reader = fs::read_to_string(comp_path);
-    let comp_lines = match comp_reader {
-        Ok(lines) => lines,
+fn read_file(candidate_path: PathBuf) -> Option<String> {
+    let candidate_reader = fs::read_to_string(candidate_path);
+    let candidate_content = match candidate_reader {
+        Ok(content) => content,
         Err(error) => match error.kind() {
             std::io::ErrorKind::InvalidData => return None,
             other_error => panic!("{:?}", other_error),
         },
     };
-    Some(comp_lines)
+    Some(candidate_content)
 }
 
-/// Returns the percentage of lines from `ref_lines` that also exist in `comp_lines`.
-///
+/// Returns the `similar::TextDiff::ratio()` between the reference and candidate
+/// strings. This is a Ratcliff/Obershelp similarity over the line sequences,
+/// not the fraction of reference lines that appear in the candidate. See
+/// ADR-0001 for the rationale.
 ///
 /// # Examples
 ///
 /// ```
-/// //                ✓   ✓  x   ✓   x      = 3
-/// let ref_lines = "12\n14\n5\n17\n19\n";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
+/// let reference_string = "12\n14\n5\n17\n19\n";
+/// let candidate_content = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_similarity_ratio(reference_string, candidate_content);
 /// assert_eq!(result, 3.0 / 7.0);
 /// ```
 /// ---
 /// ```
-/// //                ✓   ✓  x   x    = 2 / 4 = 0.5
-/// let ref_lines = "12\n14\n5\n17";
-/// let comp_lines = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
-/// let result = busca::get_percent_matching_lines(ref_lines, comp_lines);
+/// let reference_string = "12\n14\n5\n17";
+/// let candidate_content = "11\n12\n13\n14\n15\n16\n\n17\n18\n";
+/// let result = busca::get_similarity_ratio(reference_string, candidate_content);
 /// assert_eq!(result, 4.0 / 13.0);
 /// ```
 ///
-pub fn get_percent_matching_lines(ref_lines: &str, comp_lines: &str) -> f32 {
-    let diff = TextDiff::from_lines(ref_lines, comp_lines);
+pub fn get_similarity_ratio(reference_string: &str, candidate_content: &str) -> f32 {
+    let diff = TextDiff::from_lines(reference_string, candidate_content);
     diff.ratio()
 }
 
@@ -371,9 +375,9 @@ mod test_compare_file {
         Args {
             reference_string: fs::read_to_string("sample_dir_hello_world/file_2.py").unwrap(),
             search_path: PathBuf::from("sample_dir_hello_world"),
-            max_lines: Some(5000),
-            include_patterns: Some(vec![Pattern::new("*.py").unwrap()]),
-            exclude_patterns: Some(vec![Pattern::new("*.yml").unwrap()]),
+            max_file_lines: Some(5000),
+            include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_glob: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(8),
         }
     }
@@ -382,7 +386,7 @@ mod test_compare_file {
     fn skip_directory() {
         let valid_args = get_valid_args();
 
-        let ref_lines =
+        let reference_string =
             fs::read_to_string("sample_dir_hello_world/nested_dir/sample_python_file_3.py")
                 .unwrap();
 
@@ -392,7 +396,8 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, &ref_lines);
+        let file_comparison =
+            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
 
         assert_eq!(file_comparison, None);
     }
@@ -403,7 +408,7 @@ mod test_compare_file {
 
         let file_path_str = "sample_dir_hello_world/nested_dir/sample_python_file_3.py";
 
-        let ref_lines = fs::read_to_string(file_path_str).unwrap();
+        let reference_string = fs::read_to_string(file_path_str).unwrap();
 
         let dir_entry_result = WalkDir::new(file_path_str)
             .into_iter()
@@ -411,42 +416,44 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, &ref_lines);
+        let file_comparison =
+            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
 
         assert_eq!(
             file_comparison,
-            Some(FileMatch {
+            Some(FileComparison {
                 path: PathBuf::from(file_path_str),
-                percent_match: 1.0,
-                lines: ref_lines,
+                similarity_ratio: 1.0,
+                content: reference_string,
             })
         );
     }
 
     #[test]
-    fn normal_file_comp() {
+    fn normal_file_comparison() {
         let valid_args = get_valid_args();
 
-        let ref_lines =
+        let reference_string =
             fs::read_to_string("sample_dir_hello_world/nested_dir/sample_python_file_3.py")
                 .unwrap();
 
-        let comp_path_str = "sample_dir_hello_world/file_1.py";
+        let candidate_path_str = "sample_dir_hello_world/file_1.py";
 
-        let dir_entry_result = WalkDir::new(comp_path_str)
+        let dir_entry_result = WalkDir::new(candidate_path_str)
             .into_iter()
             .next()
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, &ref_lines);
+        let file_comparison =
+            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
 
         assert_eq!(
             file_comparison,
-            Some(FileMatch {
-                path: PathBuf::from(comp_path_str),
-                percent_match: 3.0 / 7.0,
-                lines: fs::read_to_string(comp_path_str).unwrap(),
+            Some(FileComparison {
+                path: PathBuf::from(candidate_path_str),
+                similarity_ratio: 3.0 / 7.0,
+                content: fs::read_to_string(candidate_path_str).unwrap(),
             })
         );
     }
@@ -454,11 +461,11 @@ mod test_compare_file {
     #[test]
     fn include_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.include_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+        valid_args.include_glob = Some(vec![Pattern::new("*.json").unwrap()]);
 
-        let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
+        let candidate_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
 
-        let dir_entry_result = WalkDir::new(comp_path_str)
+        let dir_entry_result = WalkDir::new(candidate_path_str)
             .into_iter()
             .next()
             .unwrap()
@@ -468,10 +475,10 @@ mod test_compare_file {
 
         assert_eq!(
             file_comparison,
-            Some(FileMatch {
-                path: PathBuf::from(comp_path_str),
-                percent_match: 0.0,
-                lines: fs::read_to_string(comp_path_str).unwrap(),
+            Some(FileComparison {
+                path: PathBuf::from(candidate_path_str),
+                similarity_ratio: 0.0,
+                content: fs::read_to_string(candidate_path_str).unwrap(),
             })
         );
     }
@@ -479,11 +486,11 @@ mod test_compare_file {
     #[test]
     fn exclude_glob() {
         let mut valid_args = get_valid_args();
-        valid_args.exclude_patterns = Some(vec![Pattern::new("*.json").unwrap()]);
+        valid_args.exclude_glob = Some(vec![Pattern::new("*.json").unwrap()]);
 
-        let comp_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
+        let candidate_path_str = "sample_dir_hello_world/nested_dir/sample_json.json";
 
-        let dir_entry_result = WalkDir::new(comp_path_str)
+        let dir_entry_result = WalkDir::new(candidate_path_str)
             .into_iter()
             .next()
             .unwrap()
