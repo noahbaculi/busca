@@ -24,6 +24,7 @@ CLI and library to search for files with content that most closely match the lin
         - [Change search to scan the current working directory](#change-search-to-scan-the-current-working-directory)
         - [Narrow search to only consider `.json` files whose paths match the glob `**/*foo*` and that contain fewer than 1,000 lines](#narrow-search-to-only-consider-json-files-whose-paths-match-the-glob-foo-and-that-contain-fewer-than-1000-lines)
         - [Piped input mode to search the output of a command](#piped-input-mode-to-search-the-output-of-a-command)
+  - [Versioning](#versioning)
     - [CLI Installation](#cli-installation)
       - [Mac OS](#mac-os)
         - [Homebrew](#homebrew)
@@ -181,6 +182,13 @@ busca_cmd_output echo 'String to find in files.'
 ```
 
 </details>
+
+## Versioning
+
+- **Rust MSRV**: 1.80 (enforced via `Cargo.toml` `rust-version`).
+- **Python**: 3.11 or later.
+- **Semver**: breaking changes ship on major version bumps. The Rust public surface covered by semver is `Args`, `FileComparison`, `Error`, `run_search`, `run_search_with_progress`, `get_similarity_ratio`, and `format_file_comparisons`. Items not in this list are implementation details and may change in any release.
+- **Python public surface**: `busca_py.search` and `busca_py.FileComparison` as declared in `busca_py.pyi`.
 
 ### CLI Installation
 
