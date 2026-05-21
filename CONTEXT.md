@@ -45,7 +45,7 @@ A library-side presentation helper that returns the ranked CLI-style summary as 
 
 ## Flagged ambiguities
 
-- **"match"**: historically used both for "we produced a result for this file" and for "this file actually resembles the reference." Resolved by reserving `FileComparison` for the former and reading `similarity_ratio` for the latter. The Rust type `FileMatch` and the Python `FileMatch` class are scheduled for rename to `FileComparison`.
+- **"match"**: historically used both for "we produced a result for this file" and for "this file actually resembles the reference." Resolved by reserving `FileComparison` for the former and reading `similarity_ratio` for the latter. The Rust type `FileMatch` and the Python `FileMatch` class were renamed to `FileComparison` in 3.0.0.
 - **"search" with a single-file search root**: a search with one candidate is still a search, not a special "compare" mode. The CLI accepts a file at `--search-path` and treats it as a one-candidate search.
 
 ## Example dialogue

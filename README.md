@@ -95,14 +95,24 @@ Usage: busca --ref-file-path <REF_FILE_PATH> [OPTIONS]
        <SomeCommand> | busca [OPTIONS]
 
 Options:
-  -r, --ref-file-path <REF_FILE_PATH>      Local or absolute path to the reference comparison file. Overrides any piped input
-  -s, --search-path <SEARCH_PATH>          Directory or file in which to search. Defaults to CWD
-  -m, --max-file-lines <MAX_FILE_LINES>    The maximum number of lines a candidate file may have. Candidates with more lines (or zero lines) are skipped entirely [default: 10000]
-  -i, --include-glob <INCLUDE_GLOB>        Globs that qualify a file for comparison
-  -x, --exclude-glob <EXCLUDE_GLOB>        Globs that disqualify a file from comparison
-  -c, --count <COUNT>                      Number of results to display [default: 10]
-  -h, --help                               Print help
-  -V, --version                            Print version
+  -r, --ref-file-path <REF_FILE_PATH>
+          Local or absolute path to the reference comparison file. Overrides any piped input
+  -s, --search-path <SEARCH_PATH>
+          Directory or file in which to search. Defaults to CWD
+  -m, --max-file-lines <MAX_FILE_LINES>
+          The maximum number of lines a candidate file may have. Candidates with more lines (or zero lines) are skipped entirely [default: 10000]
+  -i, --include-glob <INCLUDE_GLOB>
+          Globs that qualify a file for comparison
+  -x, --exclude-glob <EXCLUDE_GLOB>
+          Globs that disqualify a file from comparison
+  -c, --count <COUNT>
+          Number of results to display [default: 10]
+      --min-similarity-ratio <MIN_SIMILARITY_RATIO>
+          Drop comparisons whose similarity ratio is below this value (in [0.0, 1.0]). Applied after sorting and before --count truncation
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
 
 #### Examples
@@ -189,6 +199,38 @@ busca_cmd_output echo 'String to find in files.'
 - **Python**: 3.11 or later.
 - **Semver**: breaking changes ship on major version bumps. The Rust public surface covered by semver is `Args`, `FileComparison`, `Error`, `run_search`, `run_search_with_progress`, `get_similarity_ratio`, and `format_file_comparisons`. Items not in this list are implementation details and may change in any release.
 - **Python public surface**: `busca_py.search` and `busca_py.FileComparison` as declared in `busca_py.pyi`.
+
+### Migrating from 2.x to 3.x
+
+Python callers should rename the kwargs and the result type:
+
+```python
+# 2.x
+results = busca_py.search_for_lines(
+    reference_string=ref,
+    search_path="./src",
+    max_lines=10_000,
+    include_globs=["*.py"],
+    exclude_globs=["*.yml"],
+)
+top = results[0]
+top.percent_match  # float
+top.lines          # str
+
+# 3.x
+results = busca_py.search(
+    reference_string=ref,
+    search_path="./src",
+    max_file_lines=10_000,
+    include_glob=["*.py"],   # also accepts a bare string
+    exclude_glob=["*.yml"],
+)
+top = results[0]
+top.similarity_ratio  # float, see ADR-0001 for the metric change
+top.content           # str
+```
+
+See [`CHANGELOG.md`](./CHANGELOG.md) for the full rename table and the Rust-side migration notes.
 
 ### CLI Installation
 
