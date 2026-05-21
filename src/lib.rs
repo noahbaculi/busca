@@ -39,30 +39,31 @@ impl FileComparison {
 /// ```
 /// let file_comparisons = vec![
 ///     busca::FileComparison {
-///         path: std::path::PathBuf::from("sample-comprehensive/projects/Geocoding/geocoding.py"),
-///         similarity_ratio: 0.9846,
-///         content: std::fs::read_to_string("sample-comprehensive/projects/Geocoding/geocoding.py").unwrap(),
-///     },
-///     busca::FileComparison {
 ///         path: std::path::PathBuf::from(
-///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
+///             "sample_dir_hello_world/nested_dir/sample_python_file_3.py",
 ///         ),
-///         similarity_ratio: 0.3481,
+///         similarity_ratio: 0.9846,
 ///         content: std::fs::read_to_string(
-///             "sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py"
-///         ).unwrap(),
+///             "sample_dir_hello_world/nested_dir/sample_python_file_3.py",
+///         )
+///         .unwrap(),
 ///     },
 ///     busca::FileComparison {
-///         path: std::path::PathBuf::from("sample-comprehensive/projects/chatbot/bot.py"),
+///         path: std::path::PathBuf::from("sample_dir_hello_world/file_1.py"),
+///         similarity_ratio: 0.3481,
+///         content: std::fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
+///     },
+///     busca::FileComparison {
+///         path: std::path::PathBuf::from("sample_dir_mix/file_5.py"),
 ///         similarity_ratio: 0.0521,
-///         content: std::fs::read_to_string("sample-comprehensive/projects/chatbot/bot.py").unwrap(),
+///         content: std::fs::read_to_string("sample_dir_mix/file_5.py").unwrap(),
 ///     },
 /// ];
 ///
 /// let expected_output = "\
-/// sample-comprehensive/projects/Geocoding/geocoding.py                  ++++++++++  98.5%
-/// sample-comprehensive/projects/Bouncing_ball_simulator/ball_bounce.py  +++         34.8%
-/// sample-comprehensive/projects/chatbot/bot.py                          +            5.2%";
+/// sample_dir_hello_world/nested_dir/sample_python_file_3.py  ++++++++++  98.5%
+/// sample_dir_hello_world/file_1.py                           +++         34.8%
+/// sample_dir_mix/file_5.py                                   +            5.2%";
 ///
 /// assert_eq!(busca::format_file_comparisons(&file_comparisons), expected_output);
 /// ```
