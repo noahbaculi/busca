@@ -390,15 +390,14 @@ pub fn compare_file(
 }
 
 fn read_file(candidate_path: PathBuf) -> Option<String> {
-    let candidate_reader = fs::read_to_string(candidate_path);
-    let candidate_content = match candidate_reader {
-        Ok(content) => content,
-        Err(error) => match error.kind() {
-            std::io::ErrorKind::InvalidData => return None,
-            other_error => panic!("{:?}", other_error),
-        },
-    };
-    Some(candidate_content)
+    match fs::read_to_string(&candidate_path) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::InvalidData => None,
+        Err(error) => {
+            eprintln!("busca: skipping {}: {}", candidate_path.display(), error);
+            None
+        }
+    }
 }
 
 /// Returns the `similar::TextDiff::ratio()` between the reference and candidate
@@ -702,5 +701,24 @@ mod test_args_new {
             Err(Error::SearchPathNotFound(p)) => assert_eq!(p, bogus),
             other => panic!("expected SearchPathNotFound, got {:?}", other),
         }
+    }
+}
+
+#[cfg(test)]
+mod test_read_file {
+    use super::*;
+
+    #[test]
+    fn returns_none_on_invalid_data() {
+        let path = PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json");
+        let result = read_file(path);
+        assert!(result.is_some(), "json file should read as UTF-8");
+    }
+
+    #[test]
+    fn returns_none_on_directory_read_without_panicking() {
+        let path = PathBuf::from("sample_dir_hello_world");
+        let result = read_file(path);
+        assert_eq!(result, None);
     }
 }
