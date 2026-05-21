@@ -16,6 +16,19 @@ fn graceful_panic(error_str: &str) -> ! {
     std::process::exit(1);
 }
 
+fn parse_similarity_ratio(s: &str) -> Result<f32, String> {
+    let v: f32 = s
+        .parse()
+        .map_err(|e: std::num::ParseFloatError| e.to_string())?;
+    if v.is_nan() {
+        return Err("must be a number, got NaN".to_owned());
+    }
+    if !(0.0..=1.0).contains(&v) {
+        return Err(format!("must be in [0.0, 1.0], got {v}"));
+    }
+    Ok(v)
+}
+
 fn main() {
     let input_args = InputArgs::parse();
     let min_similarity_ratio = input_args.min_similarity_ratio;
@@ -101,7 +114,7 @@ struct InputArgs {
 
     /// Drop comparisons whose similarity ratio is below this value (in [0.0, 1.0]).
     /// Applied after sorting and before --count truncation.
-    #[arg(long)]
+    #[arg(long, value_parser = parse_similarity_ratio)]
     min_similarity_ratio: Option<f32>,
 }
 
@@ -468,5 +481,40 @@ mod test_cli_run_search {
 
         let unfiltered = apply_min_similarity_ratio(input, None);
         assert_eq!(unfiltered.len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod test_parse_similarity_ratio {
+    use super::parse_similarity_ratio;
+
+    #[test]
+    fn accepts_in_range() {
+        assert_eq!(parse_similarity_ratio("0.0"), Ok(0.0));
+        assert_eq!(parse_similarity_ratio("1.0"), Ok(1.0));
+        assert_eq!(parse_similarity_ratio("0.5"), Ok(0.5));
+    }
+
+    #[test]
+    fn rejects_above_one() {
+        assert!(parse_similarity_ratio("1.0001").is_err());
+        assert!(parse_similarity_ratio("2.0").is_err());
+    }
+
+    #[test]
+    fn rejects_negative() {
+        assert!(parse_similarity_ratio("-0.1").is_err());
+    }
+
+    #[test]
+    fn rejects_nan() {
+        assert!(parse_similarity_ratio("NaN").is_err());
+        assert!(parse_similarity_ratio("nan").is_err());
+    }
+
+    #[test]
+    fn rejects_non_numeric() {
+        assert!(parse_similarity_ratio("abc").is_err());
+        assert!(parse_similarity_ratio("").is_err());
     }
 }
