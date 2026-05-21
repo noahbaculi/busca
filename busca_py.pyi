@@ -1,5 +1,9 @@
+import os
 from pathlib import Path
 from typing import Optional, Union
+
+StrPath = Union[str, "os.PathLike[str]"]
+
 
 class FileComparison:
     """
@@ -21,12 +25,12 @@ class FileComparison:
     similarity_ratio: float
     content: str
     def __new__(
-        cls, path: str, similarity_ratio: float, content: str
+        cls, path: StrPath, similarity_ratio: float, content: str
     ) -> FileComparison: ...
 
 def search(
     reference_string: str,
-    search_path: str,
+    search_path: StrPath,
     max_file_lines: Optional[int] = None,
     count: Optional[int] = None,
     include_glob: Optional[Union[str, list[str]]] = None,
