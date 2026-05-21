@@ -34,13 +34,13 @@ fn main() {
     let mut file_comparisons = apply_min_similarity_ratio(raw_comparisons, min_similarity_ratio);
     file_comparisons.truncate(user_count);
 
-    let file_comparisons_output = format_file_comparisons(&file_comparisons);
-    let grid_options: Vec<&str> = file_comparisons_output.split('\n').collect();
-
-    if grid_options.is_empty() {
+    if file_comparisons.is_empty() {
         println!("No files found that match the criteria.");
         std::process::exit(0);
     }
+
+    let file_comparisons_output = format_file_comparisons(&file_comparisons);
+    let grid_options: Vec<&str> = file_comparisons_output.split('\n').collect();
 
     if !interactive_input_mode() {
         println!("{}", file_comparisons_output);
