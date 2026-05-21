@@ -37,8 +37,11 @@ A per-candidate size filter. A candidate whose line count exceeds `max_file_line
 _Avoid_: max_lines (as a "consider only the first N lines" reading)
 
 **`count`**:
-The maximum number of `FileComparison`s returned, taken from the top of the descending `similarity_ratio` ranking. Defaults: `10` (CLI), unlimited (Python).
+The maximum number of `FileComparison`s returned, taken from the top of the descending `similarity_ratio` ranking. Defaults: `10` (CLI), unlimited (Python). The divergence is intentional: the CLI default fits an interactive picker; the Python library default lets callers slice the full ranking.
 _Avoid_: limit, top_k, results
+
+**`format_file_comparisons`**:
+A library-side presentation helper that returns the ranked CLI-style summary as a `String`. Kept public for embedders who want the same view without reimplementing the grid. Not a core data API.
 
 ## Flagged ambiguities
 
