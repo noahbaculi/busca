@@ -7,7 +7,7 @@ use similar::TextDiff;
 use std::fs::{self};
 use std::path::PathBuf;
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 use std::fmt;
 
@@ -229,11 +229,45 @@ fn parse_glob_vec(globs: Vec<String>) -> Result<Option<Vec<Pattern>>, Error> {
 }
 
 pub fn run_search(args: &Args) -> Result<Vec<FileComparison>, Error> {
+    run_search_with_progress(args, |_, _| {})
+}
+
+pub fn run_search_with_progress<F>(args: &Args, on_progress: F) -> Result<Vec<FileComparison>, Error>
+where
+    F: Fn(u64, u64) + Send + Sync,
+{
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     let dir_entries = WalkDir::new(&args.search_path)
         .into_iter()
         .collect::<Vec<_>>();
+    let total = dir_entries.len() as u64;
+    let done = AtomicU64::new(0);
 
-    Ok(compare_files(dir_entries.into_par_iter(), args))
+    let mut file_comparisons: Vec<FileComparison> = dir_entries
+        .into_par_iter()
+        .filter_map(|dir_entry_result| {
+            let out = match dir_entry_result {
+                Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
+                Err(_) => None,
+            };
+            let d = done.fetch_add(1, Ordering::SeqCst) + 1;
+            on_progress(d, total);
+            out
+        })
+        .collect();
+
+    file_comparisons.sort_by(|a, b| {
+        b.similarity_ratio
+            .partial_cmp(&a.similarity_ratio)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    if let Some(count) = args.count {
+        file_comparisons.truncate(count);
+    }
+
+    Ok(file_comparisons)
 }
 #[cfg(test)]
 mod test_run_search {
@@ -303,32 +337,6 @@ mod test_run_search {
         ];
         assert_eq!(run_search(&valid_args).unwrap(), expected);
     }
-}
-
-pub fn compare_files(
-    walkdir_iterator: impl ParallelIterator<Item = Result<DirEntry, walkdir::Error>>,
-    args: &Args,
-) -> Vec<FileComparison> {
-    let mut file_comparisons: Vec<FileComparison> = walkdir_iterator
-        .filter_map(|dir_entry_result| match dir_entry_result {
-            Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
-            Err(_) => None,
-        })
-        .collect();
-
-    // Sort by similarity ratio, descending
-    file_comparisons.sort_by(|a, b| {
-        b.similarity_ratio
-            .partial_cmp(&a.similarity_ratio)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    if let Some(count) = args.count {
-        // Keep the top comparisons
-        file_comparisons.truncate(count);
-    }
-
-    file_comparisons
 }
 
 pub fn compare_file(
@@ -583,6 +591,34 @@ mod test_error {
             source: glob::Pattern::new("[").unwrap_err(),
         };
         assert!(std::error::Error::source(&err).is_some());
+    }
+}
+
+#[cfg(test)]
+mod test_run_search_with_progress {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn callback_invoked_during_search() {
+        let args = Args::new(
+            fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+            PathBuf::from("sample_dir_hello_world"),
+            Some(5000),
+            Some(2),
+            vec!["*.py".into()],
+            vec!["*.yml".into()],
+        )
+        .unwrap();
+
+        let counter = AtomicU64::new(0);
+        let result = run_search_with_progress(&args, |_done, _total| {
+            counter.fetch_add(1, Ordering::SeqCst);
+        })
+        .unwrap();
+
+        assert!(!result.is_empty());
+        assert!(counter.load(Ordering::SeqCst) > 0);
     }
 }
 

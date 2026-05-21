@@ -1,7 +1,8 @@
 use busca::format_file_comparisons;
-use busca::{run_search, Args, FileComparison};
+use busca::{run_search_with_progress, Args, FileComparison};
 use clap::Parser;
 use console::{style, Style};
+use indicatif::ProgressStyle;
 use inquire::{InquireError, Select};
 use similar::{ChangeTag, TextDiff};
 use std::env;
@@ -263,7 +264,23 @@ fn interactive_input_mode() -> bool {
 }
 
 fn cli_run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
-    run_search(args).map_err(|e| e.to_string())
+    let style_result = ProgressStyle::with_template(
+        "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
+    );
+
+    let bar = indicatif::ProgressBar::new(0);
+    if let Ok(style) = style_result {
+        bar.set_style(style.progress_chars("#>-"));
+    }
+
+    let result = run_search_with_progress(args, |done, total| {
+        if bar.length() != Some(total) {
+            bar.set_length(total);
+        }
+        bar.set_position(done);
+    });
+    bar.finish_and_clear();
+    result.map_err(|e| e.to_string())
 }
 
 fn output_detailed_diff(reference_string: &str, candidate_content: &str) {
