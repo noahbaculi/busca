@@ -199,8 +199,8 @@ pub struct Args {
     pub reference_string: String,
     pub search_path: PathBuf,
     pub max_file_lines: Option<usize>,
-    pub include_glob: Option<Vec<Pattern>>,
-    pub exclude_glob: Option<Vec<Pattern>>,
+    pub(crate) include_glob: Option<Vec<Pattern>>,
+    pub(crate) exclude_glob: Option<Vec<Pattern>>,
     pub count: Option<usize>,
 }
 

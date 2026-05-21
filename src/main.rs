@@ -363,7 +363,6 @@ fn apply_min_similarity_ratio(
 #[cfg(test)]
 mod test_cli_run_search {
     use super::*;
-    use glob::Pattern;
 
     fn get_valid_args() -> Args {
         Args::new(
@@ -398,8 +397,15 @@ mod test_cli_run_search {
 
     #[test]
     fn include_glob() {
-        let mut valid_args = get_valid_args();
-        valid_args.include_glob = Some(vec![Pattern::new("*.json").unwrap()]);
+        let valid_args = Args::new(
+            fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+            PathBuf::from("sample_dir_hello_world"),
+            Some(5000),
+            Some(2),
+            vec!["*.json".into()],
+            vec!["*.yml".into()],
+        )
+        .unwrap();
 
         let expected = vec![FileComparison {
             path: PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json"),
@@ -412,8 +418,15 @@ mod test_cli_run_search {
 
     #[test]
     fn exclude_glob() {
-        let mut valid_args = get_valid_args();
-        valid_args.exclude_glob = Some(vec![Pattern::new("*.json").unwrap()]);
+        let valid_args = Args::new(
+            fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+            PathBuf::from("sample_dir_hello_world"),
+            Some(5000),
+            Some(2),
+            vec!["*.py".into()],
+            vec!["*.json".into()],
+        )
+        .unwrap();
 
         let expected = vec![
             FileComparison {
