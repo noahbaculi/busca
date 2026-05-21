@@ -356,7 +356,7 @@ mod test_run_search {
     }
 }
 
-pub fn compare_file(
+pub(crate) fn compare_file(
     candidate_path: PathBuf,
     args: &Args,
     reference_string: &str,

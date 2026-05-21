@@ -28,7 +28,7 @@ fn main() {
 
     let raw_comparisons = match cli_run_search(&args) {
         Ok(search_results) => search_results,
-        Err(_) => todo!(),
+        Err(err_str) => graceful_panic(&err_str),
     };
 
     let mut file_comparisons = apply_min_similarity_ratio(raw_comparisons, min_similarity_ratio);
