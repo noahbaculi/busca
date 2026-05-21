@@ -7,7 +7,41 @@ use similar::TextDiff;
 use std::fs::{self};
 use std::path::PathBuf;
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
-use walkdir::{DirEntry, Error, WalkDir};
+use walkdir::{DirEntry, WalkDir};
+
+use std::fmt;
+
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum Error {
+    InvalidGlob {
+        pattern: String,
+        source: glob::PatternError,
+    },
+    SearchPathNotFound(PathBuf),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::InvalidGlob { pattern, source } => {
+                write!(f, "invalid glob '{pattern}': {source}")
+            }
+            Error::SearchPathNotFound(path) => {
+                write!(f, "search path not found: {}", path.display())
+            }
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Error::InvalidGlob { source, .. } => Some(source),
+            Error::SearchPathNotFound(_) => None,
+        }
+    }
+}
 
 #[pyclass(get_all)]
 #[derive(Debug, Clone, PartialEq)]
@@ -255,7 +289,7 @@ mod test_run_search {
 }
 
 pub fn compare_files(
-    walkdir_iterator: impl ParallelIterator<Item = Result<DirEntry, Error>>,
+    walkdir_iterator: impl ParallelIterator<Item = Result<DirEntry, walkdir::Error>>,
     args: &Args,
 ) -> Vec<FileComparison> {
     let mut file_comparisons: Vec<FileComparison> = walkdir_iterator
@@ -500,5 +534,37 @@ mod test_compare_file {
         let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, "");
 
         assert_eq!(file_comparison, None);
+    }
+}
+
+#[cfg(test)]
+mod test_error {
+    use super::Error;
+    use std::path::PathBuf;
+
+    #[test]
+    fn invalid_glob_display() {
+        let err = Error::InvalidGlob {
+            pattern: "[".into(),
+            source: glob::Pattern::new("[").unwrap_err(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("invalid glob"), "got: {msg}");
+        assert!(msg.contains("["), "got: {msg}");
+    }
+
+    #[test]
+    fn search_path_not_found_display() {
+        let err = Error::SearchPathNotFound(PathBuf::from("/nope"));
+        assert_eq!(err.to_string(), "search path not found: /nope");
+    }
+
+    #[test]
+    fn invalid_glob_has_source() {
+        let err = Error::InvalidGlob {
+            pattern: "[".into(),
+            source: glob::Pattern::new("[").unwrap_err(),
+        };
+        assert!(std::error::Error::source(&err).is_some());
     }
 }
