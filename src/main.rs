@@ -18,16 +18,21 @@ fn graceful_panic(error_str: &str) -> ! {
 
 fn main() {
     let input_args = InputArgs::parse();
+    let min_similarity_ratio = input_args.min_similarity_ratio;
+    let user_count = input_args.count;
 
     let args = match input_args.into_args() {
         Ok(args) => args,
         Err(err_str) => graceful_panic(&err_str),
     };
 
-    let file_comparisons = match cli_run_search(&args) {
+    let raw_comparisons = match cli_run_search(&args) {
         Ok(search_results) => search_results,
         Err(_) => todo!(),
     };
+
+    let mut file_comparisons = apply_min_similarity_ratio(raw_comparisons, min_similarity_ratio);
+    file_comparisons.truncate(user_count);
 
     let file_comparisons_output = format_file_comparisons(&file_comparisons);
     let grid_options: Vec<&str> = file_comparisons_output.split('\n').collect();
@@ -93,6 +98,11 @@ struct InputArgs {
     /// Number of results to display
     #[arg(short, long, default_value_t = 10)]
     count: usize,
+
+    /// Drop comparisons whose similarity ratio is below this value (in [0.0, 1.0]).
+    /// Applied after sorting and before --count truncation.
+    #[arg(long)]
+    min_similarity_ratio: Option<f32>,
 }
 
 impl InputArgs {
@@ -125,7 +135,7 @@ impl InputArgs {
             reference_string,
             search_path,
             Some(self.max_file_lines),
-            Some(self.count),
+            None, // count applied in main after filtering
             self.include_glob.unwrap_or_default(),
             self.exclude_glob.unwrap_or_default(),
         )
@@ -161,6 +171,7 @@ mod test_input_args_validation {
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
+            min_similarity_ratio: None,
         };
         assert_eq!(
             input_args.into_args(),
@@ -168,7 +179,7 @@ mod test_input_args_validation {
                 valid_args.reference_string.clone(),
                 valid_args.search_path.clone(),
                 valid_args.max_file_lines,
-                valid_args.count,
+                None,
                 vec!["*.py".into()],
                 vec!["*.yml".into()],
             )
@@ -186,6 +197,7 @@ mod test_input_args_validation {
             include_glob: None,
             exclude_glob: None,
             count: valid_args.count.unwrap(),
+            min_similarity_ratio: None,
         };
         assert_eq!(
             input_args.into_args(),
@@ -193,7 +205,7 @@ mod test_input_args_validation {
                 valid_args.reference_string.clone(),
                 env::current_dir().unwrap(),
                 valid_args.max_file_lines,
-                valid_args.count,
+                None,
                 vec![],
                 vec![],
             )
@@ -211,6 +223,7 @@ mod test_input_args_validation {
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
+            min_similarity_ratio: None,
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
@@ -228,6 +241,7 @@ mod test_input_args_validation {
             include_glob: Some(vec!["*.py".to_owned()]),
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
+            min_similarity_ratio: None,
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
@@ -336,6 +350,16 @@ impl fmt::Display for Line {
     }
 }
 
+fn apply_min_similarity_ratio(
+    mut comparisons: Vec<FileComparison>,
+    min: Option<f32>,
+) -> Vec<FileComparison> {
+    if let Some(min) = min {
+        comparisons.retain(|c| c.similarity_ratio >= min);
+    }
+    comparisons
+}
+
 #[cfg(test)]
 mod test_cli_run_search {
     use super::*;
@@ -404,5 +428,32 @@ mod test_cli_run_search {
             },
         ];
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
+    }
+
+    #[test]
+    fn min_similarity_ratio_filters_below_threshold() {
+        let input = vec![
+            FileComparison {
+                path: PathBuf::from("a"),
+                similarity_ratio: 0.9,
+                content: String::new(),
+            },
+            FileComparison {
+                path: PathBuf::from("b"),
+                similarity_ratio: 0.2,
+                content: String::new(),
+            },
+            FileComparison {
+                path: PathBuf::from("c"),
+                similarity_ratio: 0.0,
+                content: String::new(),
+            },
+        ];
+        let filtered = apply_min_similarity_ratio(input.clone(), Some(0.25));
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].path, PathBuf::from("a"));
+
+        let unfiltered = apply_min_similarity_ratio(input, None);
+        assert_eq!(unfiltered.len(), 3);
     }
 }
