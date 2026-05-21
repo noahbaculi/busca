@@ -77,20 +77,17 @@ impl FileComparison {
 ///             "sample_dir_hello_world/nested_dir/sample_python_file_3.py",
 ///         ),
 ///         similarity_ratio: 0.9846,
-///         content: std::fs::read_to_string(
-///             "sample_dir_hello_world/nested_dir/sample_python_file_3.py",
-///         )
-///         .unwrap(),
+///         content: "print(\"Hello World\")\n".to_string(),
 ///     },
 ///     busca::FileComparison {
 ///         path: std::path::PathBuf::from("sample_dir_hello_world/file_1.py"),
 ///         similarity_ratio: 0.3481,
-///         content: std::fs::read_to_string("sample_dir_hello_world/file_1.py").unwrap(),
+///         content: "print(\"Hello\")\n".to_string(),
 ///     },
 ///     busca::FileComparison {
 ///         path: std::path::PathBuf::from("sample_dir_mix/file_5.py"),
 ///         similarity_ratio: 0.0521,
-///         content: std::fs::read_to_string("sample_dir_mix/file_5.py").unwrap(),
+///         content: String::new(),
 ///     },
 /// ];
 ///
