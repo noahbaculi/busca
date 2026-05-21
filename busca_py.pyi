@@ -1,4 +1,5 @@
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 
 class FileComparison:
     """
@@ -6,7 +7,7 @@ class FileComparison:
 
     Attributes
     ----------
-    path : str
+    path : pathlib.Path
         Path to the candidate file.
     similarity_ratio : float
         `similar::TextDiff::ratio()` between the reference and the candidate,
@@ -16,7 +17,7 @@ class FileComparison:
         Full contents of the candidate file.
     """
 
-    path: str
+    path: Path
     similarity_ratio: float
     content: str
     def __new__(
@@ -28,8 +29,8 @@ def search(
     search_path: str,
     max_file_lines: Optional[int] = None,
     count: Optional[int] = None,
-    include_glob: Optional[list[str]] = None,
-    exclude_glob: Optional[list[str]] = None,
+    include_glob: Optional[Union[str, list[str]]] = None,
+    exclude_glob: Optional[Union[str, list[str]]] = None,
 ) -> list[FileComparison]:
     """Walk `search_path` and return a `FileComparison` for each candidate that
     survives the include/exclude globs and `max_file_lines` filter, ranked by
