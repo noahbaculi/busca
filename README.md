@@ -3,6 +3,8 @@
 [![CICD](https://github.com/noahbaculi/busca/actions/workflows/cicd.yml/badge.svg)](https://github.com/noahbaculi/busca/actions/workflows/cicd.yml)
 [![PyPI version](https://badge.fury.io/py/busca-py.svg)](https://badge.fury.io/py/busca-py)
 
+See [`CHANGELOG.md`](./CHANGELOG.md) for release history.
+
 <img src="https://github.com/noahbaculi/busca/assets/49008873/443ead58-ff6f-4e16-982d-ba57096a6068" alt="busca logo" width="200">
 
 CLI and library to search for files with content that most closely match the lines of a reference string.
@@ -20,7 +22,7 @@ CLI and library to search for files with content that most closely match the lin
         - [Find files that most closely match the source `file_5.py` file in a search directory](#find-files-that-most-closely-match-the-source-file_5py-file-in-a-search-directory)
         - [Find files that most closely match the source `path_to_reference.json` file in a search directory](#find-files-that-most-closely-match-the-source-path_to_referencejson-file-in-a-search-directory)
         - [Change search to scan the current working directory](#change-search-to-scan-the-current-working-directory)
-        - [Narrow search to only consider `.json` files whose paths include the substring "foo" and that contain fewer than 1,000 lines](#narrow-search-to-only-consider-json-files-whose-paths-include-the-substring-foo-and-that-contain-fewer-than-1000-lines)
+        - [Narrow search to only consider `.json` files whose paths match the glob `**/*foo*` and that contain fewer than 1,000 lines](#narrow-search-to-only-consider-json-files-whose-paths-match-the-glob-foo-and-that-contain-fewer-than-1000-lines)
         - [Piped input mode to search the output of a command](#piped-input-mode-to-search-the-output-of-a-command)
     - [CLI Installation](#cli-installation)
       - [Mac OS](#mac-os)
@@ -135,10 +137,10 @@ busca --ref-file-path path_to_reference.json --search-path path_to_search_dir
 busca --ref-file-path path_to_reference.json
 ```
 
-##### Narrow search to only consider `.json` files whose paths include the substring "foo" and that contain fewer than 1,000 lines
+##### Narrow search to only consider `.json` files whose paths match the glob `**/*foo*` and that contain fewer than 1,000 lines
 
 ```shell
-busca --ref-file-path path_to_reference.json --include-glob '*.json' --include-glob '**foo**' --max-file-lines 1000
+busca --ref-file-path path_to_reference.json --include-glob '*.json' --include-glob '**/*foo*' --max-file-lines 1000
 ```
 
 - [Glob reference](<https://en.wikipedia.org/wiki/Glob_(programming)>)

@@ -294,13 +294,13 @@ fn cli_run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
             "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
         );
 
-    let walkdir_vec = WalkDir::new(&args.search_path)
+    let dir_entries = WalkDir::new(&args.search_path)
         .into_iter()
         .collect::<Vec<_>>();
 
     let file_comparisons: Vec<FileComparison> = match progress_bar_style_result {
         Ok(progress_bar_style) => compare_files(
-            walkdir_vec
+            dir_entries
                 .into_par_iter()
                 .progress_with_style(progress_bar_style.progress_chars("#>-")),
             args,
@@ -309,9 +309,9 @@ fn cli_run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
         Err(_) => {
             println!(
                 "The progress bar could not be configured. Comparing {} files...",
-                walkdir_vec.len()
+                dir_entries.len()
             );
-            compare_files(walkdir_vec.into_par_iter(), args)
+            compare_files(dir_entries.into_par_iter(), args)
         }
     };
 

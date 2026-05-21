@@ -178,11 +178,11 @@ pub struct Args {
 }
 
 pub fn run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
-    let walkdir_vec = WalkDir::new(&args.search_path)
+    let dir_entries = WalkDir::new(&args.search_path)
         .into_iter()
         .collect::<Vec<_>>();
 
-    Ok(compare_files(walkdir_vec.into_par_iter(), args))
+    Ok(compare_files(dir_entries.into_par_iter(), args))
 }
 #[cfg(test)]
 mod test_run_search {
