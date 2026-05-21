@@ -44,6 +44,8 @@ the rationale behind the similarity metric.
 | `requires-python = ">=3.7"` | `requires-python = ">=3.11"` |
 | `Cargo.toml` had no `rust-version` | `rust-version = "1.80"` |
 
+- `Args.include_glob` and `Args.exclude_glob` were `pub Option<Vec<glob::Pattern>>`; they are now `pub(crate)`. Library callers go through `Args::new` with string globs.
+
 ### Removed
 
 - `atty` dependency. Replaced by `std::io::IsTerminal` (in std since Rust 1.70).
@@ -68,3 +70,14 @@ the rationale behind the similarity metric.
   disk; it constructs `FileComparison` values inline.
 - `read_file` no longer panics on non-`InvalidData` IO errors. The candidate
   is skipped and one line is written to stderr.
+- CLI no longer shows an empty interactive picker when zero comparisons
+  survive filtering. The "No files found that match the criteria." path
+  is now reachable.
+- `--min-similarity-ratio` rejects NaN and values outside `[0.0, 1.0]`
+  at argument-parse time, with a clear clap error.
+- The Python `ValueError` raised when a bad-type element is passed to
+  `include_glob` / `exclude_glob` now includes the inner conversion
+  detail (e.g. the offending type) instead of a generic message.
+- CLI IO error messages are formatted with `Display`, not `Debug`,
+  yielding `"No such file or directory (os error 2)"` instead of
+  `Os { code: 2, kind: NotFound, .. }`.
