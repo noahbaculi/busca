@@ -109,6 +109,20 @@ class TestSearchResults(unittest.TestCase):
         for fc in result:
             self.assertFalse(str(fc.path).endswith(".json"))
 
+    def test_glob_type_error_message_includes_inner_detail(self):
+        with self.assertRaises(ValueError) as ctx:
+            busca.search(
+                reference_string="x",
+                search_path="./sample_dir_hello_world",
+                include_glob=[1, 2],
+            )
+        msg = str(ctx.exception)
+        self.assertIn("glob argument must be", msg)
+        self.assertTrue(
+            "int" in msg or "argument" in msg or "extract" in msg,
+            f"expected inner error detail in message, got: {msg}",
+        )
+
 
 class TestSearchDuration(unittest.TestCase):
     def setUp(self):

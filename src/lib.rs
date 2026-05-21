@@ -185,10 +185,10 @@ mod busca_py {
         if let Ok(s) = obj.extract::<String>() {
             return Ok(vec![s]);
         }
-        obj.extract::<Vec<String>>().map_err(|_| {
-            PyValueError::new_err(
-                "glob argument must be a string, a list of strings, or None",
-            )
+        obj.extract::<Vec<String>>().map_err(|e| {
+            PyValueError::new_err(format!(
+                "glob argument must be a string, a list of strings, or None: {e}"
+            ))
         })
     }
 }
