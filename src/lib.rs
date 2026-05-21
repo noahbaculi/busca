@@ -159,20 +159,40 @@ mod busca_py {
         search_path: PathBuf,
         max_file_lines: Option<usize>,
         count: Option<usize>,
-        include_glob: Option<Vec<String>>,
-        exclude_glob: Option<Vec<String>>,
+        include_glob: Option<Bound<'_, PyAny>>,
+        exclude_glob: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Vec<FileComparison>> {
+        let include_glob = extract_glob_arg(include_glob)?;
+        let exclude_glob = extract_glob_arg(exclude_glob)?;
+
         let args = Args::new(
             reference_string,
             search_path,
             max_file_lines,
             count,
-            include_glob.unwrap_or_default(),
-            exclude_glob.unwrap_or_default(),
+            include_glob,
+            exclude_glob,
         )
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         run_search(&args).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn extract_glob_arg(obj: Option<Bound<'_, PyAny>>) -> PyResult<Vec<String>> {
+        let Some(obj) = obj else {
+            return Ok(Vec::new());
+        };
+        if obj.is_none() {
+            return Ok(Vec::new());
+        }
+        if let Ok(s) = obj.extract::<String>() {
+            return Ok(vec![s]);
+        }
+        obj.extract::<Vec<String>>().map_err(|_| {
+            PyValueError::new_err(
+                "glob argument must be a string, a list of strings, or None",
+            )
+        })
     }
 }
 

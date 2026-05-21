@@ -85,6 +85,30 @@ class TestSearchResults(unittest.TestCase):
         self.assertEqual(file_comparison.similarity_ratio, 0.4285714328289032)
         self.assertEqual(file_comparison.content, expected_content)
 
+    def test_single_string_include_glob(self):
+        with open("./sample_dir_hello_world/file_1.py", "r") as file:
+            ref_str = file.read()
+        result = busca.search(
+            reference_string=ref_str,
+            search_path="./sample_dir_hello_world",
+            include_glob="*.py",
+            count=3,
+        )
+        self.assertTrue(len(result) >= 1)
+        self.assertEqual(result[0].similarity_ratio, 1.0)
+
+    def test_single_string_exclude_glob(self):
+        with open("./sample_dir_hello_world/file_1.py", "r") as file:
+            ref_str = file.read()
+        result = busca.search(
+            reference_string=ref_str,
+            search_path="./sample_dir_hello_world",
+            exclude_glob="*.json",
+            count=10,
+        )
+        for fc in result:
+            self.assertFalse(str(fc.path).endswith(".json"))
+
 
 class TestSearchDuration(unittest.TestCase):
     def setUp(self):
