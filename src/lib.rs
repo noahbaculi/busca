@@ -136,13 +136,6 @@ pub fn format_file_comparisons(file_comparisons: &[FileComparison]) -> String {
     display_string
 }
 
-pub fn parse_glob_pattern(pattern_string: &str) -> Pattern {
-    match glob::Pattern::new(pattern_string) {
-        Ok(pattern) => pattern,
-        Err(e) => panic!("{:?} for '{}'", e, pattern_string),
-    }
-}
-
 /// A Python module of the Rust `busca` file matching library.
 /// https://github.com/noahbaculi/busca
 #[pymodule]
@@ -169,38 +162,21 @@ mod busca_py {
         include_glob: Option<Vec<String>>,
         exclude_glob: Option<Vec<String>>,
     ) -> PyResult<Vec<FileComparison>> {
-        let include_glob: Option<Vec<Pattern>> = include_glob.map(|globs| {
-            globs
-                .iter()
-                .map(|glob| parse_glob_pattern(glob))
-                .collect()
-        });
-
-        let exclude_glob: Option<Vec<Pattern>> = exclude_glob.map(|globs| {
-            globs
-                .iter()
-                .map(|glob| parse_glob_pattern(glob))
-                .collect()
-        });
-
-        let args = Args {
+        let args = Args::new(
             reference_string,
             search_path,
             max_file_lines,
-            include_glob,
-            exclude_glob,
             count,
-        };
+            include_glob.unwrap_or_default(),
+            exclude_glob.unwrap_or_default(),
+        )
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
-        let file_comparisons = match run_search(&args) {
-            Ok(file_comparisons) => file_comparisons,
-            Err(err) => return Err(PyValueError::new_err(err)),
-        };
-
-        Ok(file_comparisons)
+        run_search(&args).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug, PartialEq)]
 pub struct Args {
     pub reference_string: String,
@@ -211,7 +187,48 @@ pub struct Args {
     pub count: Option<usize>,
 }
 
-pub fn run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
+impl Args {
+    pub fn new(
+        reference_string: String,
+        search_path: PathBuf,
+        max_file_lines: Option<usize>,
+        count: Option<usize>,
+        include_glob: Vec<String>,
+        exclude_glob: Vec<String>,
+    ) -> Result<Self, Error> {
+        if !search_path.is_file() && !search_path.is_dir() {
+            return Err(Error::SearchPathNotFound(search_path));
+        }
+        let include_glob = parse_glob_vec(include_glob)?;
+        let exclude_glob = parse_glob_vec(exclude_glob)?;
+        Ok(Self {
+            reference_string,
+            search_path,
+            max_file_lines,
+            include_glob,
+            exclude_glob,
+            count,
+        })
+    }
+}
+
+fn parse_glob_vec(globs: Vec<String>) -> Result<Option<Vec<Pattern>>, Error> {
+    if globs.is_empty() {
+        return Ok(None);
+    }
+    globs
+        .into_iter()
+        .map(|raw| {
+            Pattern::new(&raw).map_err(|source| Error::InvalidGlob {
+                pattern: raw,
+                source,
+            })
+        })
+        .collect::<Result<Vec<Pattern>, _>>()
+        .map(Some)
+}
+
+pub fn run_search(args: &Args) -> Result<Vec<FileComparison>, Error> {
     let dir_entries = WalkDir::new(&args.search_path)
         .into_iter()
         .collect::<Vec<_>>();
@@ -566,5 +583,88 @@ mod test_error {
             source: glob::Pattern::new("[").unwrap_err(),
         };
         assert!(std::error::Error::source(&err).is_some());
+    }
+}
+
+#[cfg(test)]
+mod test_args_new {
+    use super::*;
+
+    #[test]
+    fn happy_path() {
+        let args = Args::new(
+            "ref".into(),
+            PathBuf::from("sample_dir_hello_world"),
+            Some(1000),
+            Some(5),
+            vec!["*.py".into()],
+            vec!["*.yml".into()],
+        )
+        .unwrap();
+        assert_eq!(args.max_file_lines, Some(1000));
+        assert_eq!(args.count, Some(5));
+        assert!(args.include_glob.is_some());
+        assert!(args.exclude_glob.is_some());
+    }
+
+    #[test]
+    fn empty_glob_vec_is_no_filter() {
+        let args = Args::new(
+            "ref".into(),
+            PathBuf::from("sample_dir_hello_world"),
+            None,
+            None,
+            vec![],
+            vec![],
+        )
+        .unwrap();
+        assert!(args.include_glob.is_none());
+        assert!(args.exclude_glob.is_none());
+    }
+
+    #[test]
+    fn invalid_include_glob_errors() {
+        let result = Args::new(
+            "ref".into(),
+            PathBuf::from("sample_dir_hello_world"),
+            None,
+            None,
+            vec!["[".into()],
+            vec![],
+        );
+        match result {
+            Err(Error::InvalidGlob { pattern, .. }) => assert_eq!(pattern, "["),
+            other => panic!("expected InvalidGlob, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn invalid_exclude_glob_errors() {
+        let result = Args::new(
+            "ref".into(),
+            PathBuf::from("sample_dir_hello_world"),
+            None,
+            None,
+            vec![],
+            vec!["[".into()],
+        );
+        assert!(matches!(result, Err(Error::InvalidGlob { .. })));
+    }
+
+    #[test]
+    fn missing_search_path_errors() {
+        let bogus = PathBuf::from("/definitely/not/a/real/path/xyz123");
+        let result = Args::new(
+            "ref".into(),
+            bogus.clone(),
+            None,
+            None,
+            vec![],
+            vec![],
+        );
+        match result {
+            Err(Error::SearchPathNotFound(p)) => assert_eq!(p, bogus),
+            other => panic!("expected SearchPathNotFound, got {:?}", other),
+        }
     }
 }

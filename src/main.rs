@@ -1,16 +1,13 @@
 use busca::format_file_comparisons;
-use busca::{compare_files, parse_glob_pattern, Args, FileComparison};
+use busca::{run_search, Args, FileComparison};
 use clap::Parser;
 use console::{style, Style};
-use indicatif::{ParallelProgressIterator, ProgressStyle};
 use inquire::{InquireError, Select};
-use rayon::prelude::IntoParallelIterator;
 use similar::{ChangeTag, TextDiff};
 use std::env;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
-use walkdir::WalkDir;
 
 /// Output error to the std err and exit with status code 1.
 fn graceful_panic(error_str: &str) -> ! {
@@ -98,7 +95,6 @@ struct InputArgs {
 }
 
 impl InputArgs {
-    // Consumes and validates InputArgs and returns Args
     pub fn into_args(self) -> Result<Args, String> {
         let reference_string = match self.ref_file_path {
             Some(ref_file_path) => match ref_file_path.is_file() {
@@ -108,73 +104,48 @@ impl InputArgs {
                         ref_file_path.display()
                     ))
                 }
-
                 true => match fs::read_to_string(ref_file_path) {
                     Err(e) => return Err(format!("{:?}", e)),
-                    Ok(ref_file_string) => ref_file_string,
+                    Ok(s) => s,
                 },
             },
             None => get_piped_input()?,
         };
 
-        // Assign search_path to CWD if the arg is not given
         let search_path = match self.search_path {
-            Some(input_search_path) => input_search_path,
-
+            Some(p) => p,
             None => match env::current_dir() {
-                Ok(cwd_path) => cwd_path,
+                Ok(p) => p,
                 Err(e) => return Err(format!("{:?}", e)),
             },
         };
 
-        if !search_path.is_file() & !search_path.is_dir() {
-            return Err(format!(
-                "The search path '{}' could not be found.",
-                search_path.display()
-            ));
-        }
-
-        // Parse the include glob patterns from input args strings
-        let include_glob = self.include_glob.map(|globs| {
-            globs
-                .iter()
-                .map(|glob| parse_glob_pattern(glob))
-                .collect()
-        });
-
-        // Parse the exclude glob patterns from input args strings
-        let exclude_glob = self.exclude_glob.map(|globs| {
-            globs
-                .iter()
-                .map(|glob| parse_glob_pattern(glob))
-                .collect()
-        });
-
-        Ok(Args {
+        Args::new(
             reference_string,
             search_path,
-            max_file_lines: Some(self.max_file_lines),
-            include_glob,
-            exclude_glob,
-            count: Some(self.count),
-        })
+            Some(self.max_file_lines),
+            Some(self.count),
+            self.include_glob.unwrap_or_default(),
+            self.exclude_glob.unwrap_or_default(),
+        )
+        .map_err(|e| e.to_string())
     }
 }
 
 #[cfg(test)]
 mod test_input_args_validation {
     use super::*;
-    use glob::Pattern;
 
     fn get_valid_args() -> Args {
-        Args {
-            reference_string: fs::read_to_string("sample_dir_hello_world/file_3.py").unwrap(),
-            search_path: PathBuf::from("sample_dir_hello_world"),
-            max_file_lines: Some(5000),
-            include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
-            exclude_glob: Some(vec![Pattern::new("*.yml").unwrap()]),
-            count: Some(8),
-        }
+        Args::new(
+            fs::read_to_string("sample_dir_hello_world/file_3.py").unwrap(),
+            PathBuf::from("sample_dir_hello_world"),
+            Some(5000),
+            Some(8),
+            vec!["*.py".into()],
+            vec!["*.yml".into()],
+        )
+        .unwrap()
     }
 
     #[test]
@@ -192,14 +163,15 @@ mod test_input_args_validation {
         };
         assert_eq!(
             input_args.into_args(),
-            Ok(Args {
-                reference_string: valid_args.reference_string,
-                search_path: valid_args.search_path.clone(),
-                max_file_lines: valid_args.max_file_lines,
-                include_glob: valid_args.include_glob.clone(),
-                exclude_glob: valid_args.exclude_glob.clone(),
-                count: valid_args.count,
-            })
+            Ok(Args::new(
+                valid_args.reference_string.clone(),
+                valid_args.search_path.clone(),
+                valid_args.max_file_lines,
+                valid_args.count,
+                vec!["*.py".into()],
+                vec!["*.yml".into()],
+            )
+            .unwrap())
         );
     }
 
@@ -216,14 +188,15 @@ mod test_input_args_validation {
         };
         assert_eq!(
             input_args.into_args(),
-            Ok(Args {
-                reference_string: valid_args.reference_string,
-                search_path: env::current_dir().unwrap(),
-                max_file_lines: valid_args.max_file_lines,
-                include_glob: None,
-                exclude_glob: None,
-                count: valid_args.count,
-            })
+            Ok(Args::new(
+                valid_args.reference_string.clone(),
+                env::current_dir().unwrap(),
+                valid_args.max_file_lines,
+                valid_args.count,
+                vec![],
+                vec![],
+            )
+            .unwrap())
         );
     }
 
@@ -257,7 +230,7 @@ mod test_input_args_validation {
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
-            Err("The search path 'nonexistent_path' could not be found.".to_owned())
+            Err("search path not found: nonexistent_path".to_owned())
         );
     }
 }
@@ -290,33 +263,7 @@ fn interactive_input_mode() -> bool {
 }
 
 fn cli_run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
-    // Create progress bar style
-    let progress_bar_style_result = ProgressStyle::with_template(
-            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {human_pos} / {human_len} files ({percent}%)",
-        );
-
-    let dir_entries = WalkDir::new(&args.search_path)
-        .into_iter()
-        .collect::<Vec<_>>();
-
-    let file_comparisons: Vec<FileComparison> = match progress_bar_style_result {
-        Ok(progress_bar_style) => compare_files(
-            dir_entries
-                .into_par_iter()
-                .progress_with_style(progress_bar_style.progress_chars("#>-")),
-            args,
-        ),
-
-        Err(_) => {
-            println!(
-                "The progress bar could not be configured. Comparing {} files...",
-                dir_entries.len()
-            );
-            compare_files(dir_entries.into_par_iter(), args)
-        }
-    };
-
-    Ok(file_comparisons)
+    run_search(args).map_err(|e| e.to_string())
 }
 
 fn output_detailed_diff(reference_string: &str, candidate_content: &str) {
@@ -378,15 +325,15 @@ mod test_cli_run_search {
     use glob::Pattern;
 
     fn get_valid_args() -> Args {
-        Args {
-            reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
-                .unwrap(),
-            search_path: PathBuf::from("sample_dir_hello_world"),
-            max_file_lines: Some(5000),
-            include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
-            exclude_glob: Some(vec![Pattern::new("*.yml").unwrap()]),
-            count: Some(2),
-        }
+        Args::new(
+            fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
+            PathBuf::from("sample_dir_hello_world"),
+            Some(5000),
+            Some(2),
+            vec!["*.py".into()],
+            vec!["*.yml".into()],
+        )
+        .unwrap()
     }
 
     #[test]
