@@ -129,7 +129,7 @@ impl InputArgs {
                     ))
                 }
                 true => match fs::read_to_string(ref_file_path) {
-                    Err(e) => return Err(format!("{:?}", e)),
+                    Err(e) => return Err(e.to_string()),
                     Ok(s) => s,
                 },
             },
@@ -140,7 +140,7 @@ impl InputArgs {
             Some(p) => p,
             None => match env::current_dir() {
                 Ok(p) => p,
-                Err(e) => return Err(format!("{:?}", e)),
+                Err(e) => return Err(e.to_string()),
             },
         };
 
