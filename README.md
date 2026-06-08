@@ -9,7 +9,7 @@ See [`CHANGELOG.md`](./CHANGELOG.md) for release history.
 
 CLI and library to search for files with content that most closely match the lines of a reference string.
 
-![Busca Demo](https://github.com/noahbaculi/busca/assets/49008873/dbb40dc1-427e-4d55-839b-31e8c287bc43)
+![Animated demo: busca ranks files by similarity and shows a colored line-diff](docs/demo.gif)
 
 ## Table of contents
 
@@ -124,15 +124,15 @@ Options:
 
 ? Select a file to compare:  
   sample_dir_mix/file_5.py                  ++++++++++  100.0%
-> sample_dir_mix/file_5v2.py                ++++++++++   97.5%
-  sample_dir_mix/nested_dir/file_7.py       ++++         42.3%
-  sample_dir_mix/aldras/aldras_settings.py  ++           24.1%
-  sample_dir_mix/aldras/aldras_core.py      ++           21.0%
-  sample_dir_mix/file_3.py                  +            13.2%
-  sample_dir_mix/file_1.py                  +            11.0%
-  sample_dir_mix/file_2.py                  +             9.4%
-  sample_dir_mix/aldras/aldras_execute.py   +             7.5%
-  sample_dir_mix/file_4.py                  +             6.9%
+> sample_dir_mix/file_5v2.py                ++++++++++   97.2%
+  sample_dir_mix/nested_dir/file_7.py       +++++        45.8%
+  sample_dir_mix/aldras/aldras_core.py      ++           21.7%
+  sample_dir_mix/aldras/aldras_settings.py  ++           21.2%
+  sample_dir_mix/file_3.py                  ++           16.8%
+  sample_dir_mix/file_1.py                  +            14.1%
+  sample_dir_mix/file_2.py                  +            13.7%
+  sample_dir_mix/aldras/aldras_execute.py   +            11.9%
+  sample_dir_mix/file_4.py                  +             9.0%
 [↑↓ to move, enter to select, type to filter]
 ```
 
