@@ -10,7 +10,7 @@ use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 
-/// Output error to the std err and exit with status code 1.
+/// Print an error message to stderr and exit with status code 1.
 fn graceful_panic(error_str: &str) -> ! {
     eprintln!("{}", error_str);
     std::process::exit(1);
@@ -148,7 +148,7 @@ impl InputArgs {
             reference_string,
             search_path,
             Some(self.max_file_lines),
-            None, // count applied in main after filtering
+            None, // count is applied in main after filtering
             self.include_glob.unwrap_or_default(),
             self.exclude_glob.unwrap_or_default(),
         )
@@ -284,7 +284,7 @@ fn get_piped_input() -> Result<String, String> {
     Ok(piped_input)
 }
 
-/// If the current stdin is a TTY (interactive)
+/// Returns `true` if stdin is a TTY (interactive).
 fn interactive_input_mode() -> bool {
     use std::io::IsTerminal;
     std::io::stdin().is_terminal()
