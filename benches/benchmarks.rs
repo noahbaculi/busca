@@ -18,26 +18,30 @@ fn bench_get_similarity_ratio(c: &mut Criterion) {
     });
 }
 
-/// Benchmarks a full search over the pinned `python-mini-projects` fixture.
-/// Exercises the directory walk, glob matching, file reads, parallelism, and
-/// content retention. Skips itself (no panic) when the fixture is absent so the
+/// Benchmarks a full search over the `django/` package source, pinned to
+/// Django release tag 5.2.15 (commit 21e98408). A cohesive single codebase
+/// gives a realistic similarity distribution, and a real multi-hundred-line
+/// module as the reference makes each candidate diff carry real cost. Those are
+/// the conditions audit finding B2 (top-N pruning) needs to be measured
+/// against. Skips itself (no panic) when the fixture is absent so the
 /// micro-benchmark still runs locally without the clone.
 fn bench_run_search(c: &mut Criterion) {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let fixture = manifest.join("sample-comprehensive");
-    if !fixture.exists() {
+    let search_path = manifest.join("sample-comprehensive/django");
+    if !search_path.is_dir() {
         eprintln!(
             "skipping run_search benchmark: fixture '{}' not found.\n\
              Clone it with:\n  \
-             git clone https://github.com/Python-World/python-mini-projects.git sample-comprehensive \
-             && (cd sample-comprehensive && git reset --hard e0cfd4b0fe5e0bb4d443daba594e83332d5fb720 && rm -rf .github)",
-            fixture.display()
+             git clone --depth 1 --branch 5.2.15 https://github.com/django/django.git sample-comprehensive",
+            search_path.display()
         );
         return;
     }
 
-    let reference = fs::read_to_string(manifest.join("sample_dir_hello_world/nested_dir/ref_B.py"))
-        .expect("read reference fixture");
+    // A real Django module, present in the tree at the pinned tag, so it scores
+    // against its own cohesive corpus rather than a synthetic snippet.
+    let reference =
+        fs::read_to_string(search_path.join("forms/models.py")).expect("read reference fixture");
     // `count` drives audit finding B2: a small top-N is where a running
     // threshold could prune full diffs, while `None` returns every candidate
     // and must stay a no-op. Benching all three lets an audit branch prove the
@@ -49,7 +53,7 @@ fn bench_run_search(c: &mut Criterion) {
     for (label, count) in count_variants {
         let args = Args::new(
             reference.clone(),
-            fixture.clone(),
+            search_path.clone(),
             Some(10_000),
             count,
             vec!["*.py".to_string()],
