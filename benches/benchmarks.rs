@@ -38,21 +38,28 @@ fn bench_run_search(c: &mut Criterion) {
 
     let reference = fs::read_to_string(manifest.join("sample_dir_hello_world/nested_dir/ref_B.py"))
         .expect("read reference fixture");
-    let args = Args::new(
-        reference,
-        fixture,
-        Some(10_000),
-        Some(10),
-        vec!["*.py".to_string()],
-        vec![],
-    )
-    .expect("build args");
+    // `count` drives audit finding B2: a small top-N is where a running
+    // threshold could prune full diffs, while `None` returns every candidate
+    // and must stay a no-op. Benching all three lets an audit branch prove the
+    // win on small counts without regressing the unbounded library default.
+    let count_variants = [("top-1", Some(1)), ("top-10", Some(10)), ("unbounded", None)];
 
     let mut group = c.benchmark_group("run_search");
     group.sample_size(10);
-    group.bench_function("python-mini-projects", |b| {
-        b.iter(|| run_search(black_box(&args)).expect("search"))
-    });
+    for (label, count) in count_variants {
+        let args = Args::new(
+            reference.clone(),
+            fixture.clone(),
+            Some(10_000),
+            count,
+            vec!["*.py".to_string()],
+            vec![],
+        )
+        .expect("build args");
+        group.bench_function(label, |b| {
+            b.iter(|| run_search(black_box(&args)).expect("search"))
+        });
+    }
     group.finish();
 }
 
