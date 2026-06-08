@@ -11,13 +11,13 @@ CLI and library to search for files with content that most closely match the lin
 
 ![Busca Demo](https://github.com/noahbaculi/busca/assets/49008873/dbb40dc1-427e-4d55-839b-31e8c287bc43)
 
-## Table of Contents
+## Table of contents
 
 - [busca](#busca)
-  - [Table of Contents](#table-of-contents)
-  - [Python Library](#python-library)
-  - [Command Line Interface](#command-line-interface)
-    - [CLI Usage](#cli-usage)
+  - [Table of contents](#table-of-contents)
+  - [Python library](#python-library)
+  - [Command line interface](#command-line-interface)
+    - [CLI usage](#cli-usage)
       - [Examples](#examples)
         - [Find files that most closely match the source `file_5.py` file in a search directory](#find-files-that-most-closely-match-the-source-file_5py-file-in-a-search-directory)
         - [Find files that most closely match the source `path_to_reference.json` file in a search directory](#find-files-that-most-closely-match-the-source-path_to_referencejson-file-in-a-search-directory)
@@ -25,13 +25,13 @@ CLI and library to search for files with content that most closely match the lin
         - [Narrow search to only consider `.json` files whose paths match the glob `**/*foo*` and that contain fewer than 1,000 lines](#narrow-search-to-only-consider-json-files-whose-paths-match-the-glob-foo-and-that-contain-fewer-than-1000-lines)
         - [Piped input mode to search the output of a command](#piped-input-mode-to-search-the-output-of-a-command)
   - [Versioning](#versioning)
-    - [CLI Installation](#cli-installation)
-      - [Mac OS](#mac-os)
+    - [CLI installation](#cli-installation)
+      - [macOS](#macos)
         - [Homebrew](#homebrew)
-      - [All platforms (Windows, MacOS, Linux)](#all-platforms-windows-macos-linux)
+      - [All platforms (Windows, macOS, Linux)](#all-platforms-windows-macos-linux)
         - [Compile from source](#compile-from-source)
 
-## Python Library
+## Python library
 
 > 🐍 The Python library is renamed to `busca_py` due to a name conflict with an [existing (possibly abandoned) project](https://pypi.org/project/Busca/).
 
@@ -76,9 +76,9 @@ assert len(relevant_file_comparisons) < len(all_file_comparisons)
 new_file_comparison = busca.FileComparison("file/path", 1.0, "file\ncontent")
 ```
 
-## Command Line Interface
+## Command line interface
 
-### CLI Usage
+### CLI usage
 
 🧑‍💻️ To see usage documentation, run
 
@@ -232,9 +232,9 @@ top.content           # str
 
 See [`CHANGELOG.md`](./CHANGELOG.md) for the full rename table and the Rust-side migration notes.
 
-### CLI Installation
+### CLI installation
 
-#### Mac OS
+#### macOS
 
 ##### Homebrew
 
@@ -250,7 +250,7 @@ brew update
 brew upgrade busca
 ```
 
-#### All platforms (Windows, MacOS, Linux)
+#### All platforms (Windows, macOS, Linux)
 
 ##### Compile from source
 
