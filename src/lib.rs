@@ -5,7 +5,7 @@ use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use similar::TextDiff;
 use std::fs::{self};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use walkdir::WalkDir;
 
@@ -388,7 +388,7 @@ pub(crate) fn compare_file(
         }
     };
 
-    let candidate_content = read_file(candidate_path.clone())?;
+    let candidate_content = read_file(&candidate_path)?;
 
     if let Some(max_file_lines) = args.max_file_lines {
         let num_candidate_lines = candidate_content.lines().count();
@@ -406,8 +406,8 @@ pub(crate) fn compare_file(
     })
 }
 
-fn read_file(candidate_path: PathBuf) -> Option<String> {
-    match fs::read_to_string(&candidate_path) {
+fn read_file(candidate_path: &Path) -> Option<String> {
+    match fs::read_to_string(candidate_path) {
         Ok(content) => Some(content),
         Err(error) if error.kind() == std::io::ErrorKind::InvalidData => None,
         Err(error) => {
@@ -728,14 +728,14 @@ mod test_read_file {
     #[test]
     fn returns_none_on_invalid_data() {
         let path = PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json");
-        let result = read_file(path);
+        let result = read_file(&path);
         assert!(result.is_some(), "json file should read as UTF-8");
     }
 
     #[test]
     fn returns_none_on_directory_read_without_panicking() {
         let path = PathBuf::from("sample_dir_hello_world");
-        let result = read_file(path);
+        let result = read_file(&path);
         assert_eq!(result, None);
     }
 }
