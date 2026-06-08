@@ -7,7 +7,7 @@ use similar::TextDiff;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 use std::fmt;
 
@@ -265,7 +265,7 @@ where
         .into_par_iter()
         .filter_map(|dir_entry_result| {
             let out = match dir_entry_result {
-                Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
+                Ok(dir_entry) => compare_file(dir_entry, args, &args.reference_string),
                 Err(_) => None,
             };
             let d = done.fetch_add(1, Ordering::Relaxed) + 1;
@@ -357,14 +357,26 @@ mod test_run_search {
 }
 
 pub(crate) fn compare_file(
-    candidate_path: PathBuf,
+    dir_entry: DirEntry,
     args: &Args,
     reference_string: &str,
 ) -> Option<FileComparison> {
-    // Skip paths that are not files
-    if !candidate_path.is_file() {
+    // file_type() comes from the directory read at no extra syscall, where
+    // is_file() would re-stat every candidate. For a symlink, fall back to
+    // is_file() so the link is followed exactly as before.
+    let file_type = dir_entry.file_type();
+    let is_file = if file_type.is_file() {
+        true
+    } else if file_type.is_symlink() {
+        dir_entry.path().is_file()
+    } else {
+        false
+    };
+    if !is_file {
         return None;
     }
+
+    let candidate_path = dir_entry.into_path();
 
     // Skip paths that do not match any include glob
     if let Some(include_glob) = &args.include_glob {
@@ -473,7 +485,7 @@ mod test_compare_file {
             .unwrap();
 
         let file_comparison =
-            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
+            compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(file_comparison, None);
     }
@@ -493,7 +505,7 @@ mod test_compare_file {
             .unwrap();
 
         let file_comparison =
-            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
+            compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(
             file_comparison,
@@ -522,7 +534,7 @@ mod test_compare_file {
             .unwrap();
 
         let file_comparison =
-            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
+            compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(
             file_comparison,
@@ -547,7 +559,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result, &valid_args, "");
 
         assert_eq!(
             file_comparison,
@@ -572,7 +584,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result, &valid_args, "");
 
         assert_eq!(file_comparison, None);
     }
