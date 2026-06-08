@@ -18,12 +18,12 @@ version = "0.1.1"
 ## Build a universal binary for macOS ARM and x86
 
 ```shell
-# MacOS ARM architecture
+# macOS ARM architecture
 rustup target install aarch64-apple-darwin
 cargo build --release --target aarch64-apple-darwin
 file target/aarch64-apple-darwin/release/busca  # --> Mach-O 64-bit executable arm64
 
-# MacOS x86/Intel architecture
+# macOS x86/Intel architecture
 rustup target install x86_64-apple-darwin
 cargo build --release --target x86_64-apple-darwin
 file target/x86_64-apple-darwin/release/busca   # --> Mach-O 64-bit executable x86_64
@@ -57,6 +57,6 @@ Once published, copy the URL of the TAR archive for later use with the Homebrew 
 
 ## Demo recording tips
 
-- Use MacOS built-in screen recording to capture screen.
+- Use macOS built-in screen recording to capture screen.
 - Use Oh-My-Posh `Bubbles` terminal theme.
 - Use iTerm2's `Advanced Paste` to simulate typing effect. `Edit > Paste Special > Advanced Paste...`
