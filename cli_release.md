@@ -1,8 +1,8 @@
 # CLI Release
 
-CLI releasing guide.
+Guide for cutting a CLI release.
 
-## Pick Version Number
+## Pick a version number
 
 > [Methodology: X.Y.Z, which corresponds to major.minor.patch.](https://semver.org/)
 
@@ -15,7 +15,7 @@ version = "0.1.1"
 ...
 ```
 
-## Build Universal Binary for MacOS ARM and x86
+## Build a universal binary for macOS ARM and x86
 
 ```shell
 # MacOS ARM architecture
@@ -37,7 +37,7 @@ file target/apple-darwin-universal/release/busca   # --> Mach-O universal binary
 cp target/apple-darwin-universal/release/busca python_venv/bin/busca
 ```
 
-## Create TAR archive and GitHub release
+## Create the TAR archive and GitHub release
 
 ```shell
 cd target/apple-darwin-universal/release/ 
@@ -51,12 +51,12 @@ Once published, copy the URL of the TAR archive for later use with the Homebrew 
 
 > ex: <https://github.com/noahbaculi/busca/releases/download/v0.1.1/busca-mac.tar.gz>
 
-## Update the Homebrew Tap
+## Update the Homebrew tap
 
 [Add Homebrew version](https://github.com/noahbaculi/homebrew-busca).
 
-## Demo Recording Tips
+## Demo recording tips
 
 - Use MacOS built-in screen recording to capture screen.
 - Use Oh-My-Posh `Bubbles` terminal theme.
-- Use Iterm2's `Advanced Paste` to simulate typing effect. `Edit > Paste Special > Advanced Paste...`
+- Use iTerm2's `Advanced Paste` to simulate typing effect. `Edit > Paste Special > Advanced Paste...`
