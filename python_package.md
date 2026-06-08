@@ -2,7 +2,7 @@
 
 Maintenance guide for the tooling around the Python package.
 
-## Create and Activate Virtual Environment
+## Create and activate a virtual environment
 
 ```shell
 python -m venv ./python_venv
@@ -16,7 +16,7 @@ pip install -r python_requirements.txt
 pip freeze > python_requirements.txt
 ```
 
-## Build Python package locally
+## Build the Python package locally
 
 ```shell
 maturin develop --release
@@ -28,7 +28,7 @@ maturin develop --release
 python -m unittest discover
 ```
 
-## Publish Python package to PyPi
+## Publish the Python package to PyPI
 
 First, add the `MATURIN_USERNAME` and `MATURIN_PASSWORD` environment variables using the values of an API token from PyPI.
 
