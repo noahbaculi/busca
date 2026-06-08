@@ -164,9 +164,9 @@ echo 'String to find in files.' | busca
 ```
 
 <details style="margin-bottom: 2em">
-<summary><h5>MacOS piped input mode<h4></summary>
+<summary><h5>macOS piped input mode</h5></summary>
 
-📝 There is an [open issue](https://github.com/crossterm-rs/crossterm/issues/396) for MacOS in [`crossterm`](https://github.com/crossterm-rs/crossterm), one of busca's dependencies, that does not allow prompt interactivity when using piped input. Therefore, when a non interactive mode is detected, the file comparisons will be displayed but not interactively.
+📝 [`crossterm`](https://github.com/crossterm-rs/crossterm), one of busca's dependencies, has an [open issue](https://github.com/crossterm-rs/crossterm/issues/396) on macOS that blocks prompt interactivity with piped input. When busca detects a non-interactive mode, it prints the file comparisons without the interactive picker.
 
 This can be worked around by adding the following aliases to your shell `.bashrc` or `.zshrc` file:
 
