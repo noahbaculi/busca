@@ -125,7 +125,7 @@ pub fn format_file_comparisons(file_comparisons: &[FileComparison]) -> String {
 
     let mut display_string = disp.to_string();
 
-    // Remove trailing new line
+    // Remove the trailing newline
     if display_string.ends_with('\n') {
         display_string.pop();
     }
