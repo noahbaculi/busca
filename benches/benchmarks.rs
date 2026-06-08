@@ -46,7 +46,12 @@ fn bench_run_search(c: &mut Criterion) {
     // threshold could prune full diffs, while `None` returns every candidate
     // and must stay a no-op. Benching all three lets an audit branch prove the
     // win on small counts without regressing the unbounded library default.
-    let count_variants = [("top-1", Some(1)), ("top-10", Some(10)), ("unbounded", None)];
+    let count_variants = [
+        ("top-1", Some(1)),
+        ("top-10", Some(10)),
+        ("top-20", Some(20)),
+        ("unbounded", None),
+    ];
 
     let mut group = c.benchmark_group("run_search");
     group.sample_size(10);
