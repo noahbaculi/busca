@@ -1,7 +1,7 @@
 use glob::Pattern;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use similar::TextDiff;
 use std::fs::{self};
@@ -369,7 +369,7 @@ pub(crate) fn compare_file(
     // Skip paths that do not match any include glob
     if let Some(include_glob) = &args.include_glob {
         let matches_any_include = include_glob
-            .par_iter()
+            .iter()
             .any(|glob| glob.matches_path(candidate_path.as_path()));
 
         if !matches_any_include {
@@ -380,7 +380,7 @@ pub(crate) fn compare_file(
     // Skip paths that match any exclude glob
     if let Some(exclude_glob) = &args.exclude_glob {
         let matches_any_exclude = exclude_glob
-            .par_iter()
+            .iter()
             .any(|glob| glob.matches_path(candidate_path.as_path()));
 
         if matches_any_exclude {
