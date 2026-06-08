@@ -268,7 +268,7 @@ where
                 Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
                 Err(_) => None,
             };
-            let d = done.fetch_add(1, Ordering::SeqCst) + 1;
+            let d = done.fetch_add(1, Ordering::Relaxed) + 1;
             on_progress(d, total);
             out
         })
