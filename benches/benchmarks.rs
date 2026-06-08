@@ -1,4 +1,4 @@
-use busca::get_similarity_ratio;
+use busca::{get_similarity_ratio, run_search, Args};
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::fs;
 use std::hint::black_box;
@@ -18,5 +18,43 @@ fn bench_get_similarity_ratio(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_get_similarity_ratio);
+/// Benchmarks a full search over the pinned `python-mini-projects` fixture.
+/// Exercises the directory walk, glob matching, file reads, parallelism, and
+/// content retention. Skips itself (no panic) when the fixture is absent so the
+/// micro-benchmark still runs locally without the clone.
+fn bench_run_search(c: &mut Criterion) {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let fixture = manifest.join("sample-comprehensive");
+    if !fixture.exists() {
+        eprintln!(
+            "skipping run_search benchmark: fixture '{}' not found.\n\
+             Clone it with:\n  \
+             git clone https://github.com/Python-World/python-mini-projects.git sample-comprehensive \
+             && (cd sample-comprehensive && git reset --hard e0cfd4b0fe5e0bb4d443daba594e83332d5fb720 && rm -rf .github)",
+            fixture.display()
+        );
+        return;
+    }
+
+    let reference = fs::read_to_string(manifest.join("sample_dir_hello_world/nested_dir/ref_B.py"))
+        .expect("read reference fixture");
+    let args = Args::new(
+        reference,
+        fixture,
+        Some(10_000),
+        Some(10),
+        vec!["*.py".to_string()],
+        vec![],
+    )
+    .expect("build args");
+
+    let mut group = c.benchmark_group("run_search");
+    group.sample_size(10);
+    group.bench_function("python-mini-projects", |b| {
+        b.iter(|| run_search(black_box(&args)).expect("search"))
+    });
+    group.finish();
+}
+
+criterion_group!(benches, bench_get_similarity_ratio, bench_run_search);
 criterion_main!(benches);
