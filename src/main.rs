@@ -10,6 +10,12 @@ use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum OutputFormat {
+    Human,
+    Json,
+}
+
 /// Print an error message to stderr and exit with status code 1.
 fn graceful_panic(error_str: &str) -> ! {
     eprintln!("{}", error_str);
@@ -32,6 +38,10 @@ fn parse_similarity_ratio(s: &str) -> Result<f32, String> {
 fn main() {
     let input_args = InputArgs::parse();
 
+    let output_format = input_args.format;
+    let with_content = input_args.with_content;
+    let no_interactive = input_args.no_interactive;
+
     let args = match input_args.into_args() {
         Ok(args) => args,
         Err(err_str) => graceful_panic(&err_str),
@@ -47,31 +57,43 @@ fn main() {
         std::process::exit(0);
     }
 
-    let file_comparisons_output = format_file_comparisons(&file_comparisons);
-    let grid_options: Vec<&str> = file_comparisons_output.split('\n').collect();
+    match output_format {
+        OutputFormat::Json => {
+            println!("{}", comparisons_to_json(&file_comparisons, with_content));
+        }
+        OutputFormat::Human => {
+            let file_comparisons_output = format_file_comparisons(&file_comparisons);
+            let interactive = interactive_input_mode() && !no_interactive;
 
-    if !interactive_input_mode() {
-        println!("{}", file_comparisons_output);
-        println!("\nNote: Interactive prompt is not supported in this mode.");
-        return;
+            if !interactive {
+                println!("{}", file_comparisons_output);
+                // Explain the missing picker only on automatic fallback, and on
+                // stderr so stdout stays clean for parsing.
+                if !interactive_input_mode() && !no_interactive {
+                    eprintln!("Note: interactive prompt is not supported in this mode.");
+                }
+                return;
+            }
+
+            let grid_options: Vec<&str> = file_comparisons_output.split('\n').collect();
+            let ans = match Select::new("Select a file to compare:", grid_options)
+                .with_page_size(10)
+                .raw_prompt()
+            {
+                Ok(answer) => answer,
+                Err(InquireError::OperationCanceled) => std::process::exit(0),
+                Err(err) => graceful_panic(&err.to_string()),
+            };
+
+            let selected_file_comparison = &file_comparisons[ans.index];
+            let selected_file_comparison_path = &selected_file_comparison.path;
+            let candidate_content = match fs::read_to_string(selected_file_comparison_path) {
+                Ok(candidate_content) => candidate_content,
+                Err(err) => graceful_panic(&err.to_string()),
+            };
+            output_detailed_diff(&args.reference_string, &candidate_content);
+        }
     }
-
-    let ans = match Select::new("Select a file to compare:", grid_options)
-        .with_page_size(10)
-        .raw_prompt()
-    {
-        Ok(answer) => answer,
-        Err(InquireError::OperationCanceled) => std::process::exit(0),
-        Err(err) => graceful_panic(&err.to_string()),
-    };
-
-    let selected_file_comparison = &file_comparisons[ans.index];
-    let selected_file_comparison_path = &selected_file_comparison.path;
-    let candidate_content = match fs::read_to_string(selected_file_comparison_path) {
-        Ok(candidate_content) => candidate_content,
-        Err(err) => graceful_panic(&err.to_string()),
-    };
-    output_detailed_diff(&args.reference_string, &candidate_content);
 }
 
 /// Simple utility to search for files with content that most closely match the lines of a reference string.
@@ -111,6 +133,18 @@ struct InputArgs {
     /// Applied after sorting and before --count truncation.
     #[arg(long, value_parser = parse_similarity_ratio)]
     min_similarity_ratio: Option<f32>,
+
+    /// Output format for the ranked results
+    #[arg(long, value_enum, default_value = "human")]
+    format: OutputFormat,
+
+    /// Include each file's content in JSON output. Ignored for the human format
+    #[arg(long)]
+    with_content: bool,
+
+    /// Print the ranked list instead of launching the interactive picker
+    #[arg(long)]
+    no_interactive: bool,
 }
 
 impl InputArgs {
@@ -182,6 +216,9 @@ mod test_input_args_validation {
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
             min_similarity_ratio: None,
+            format: OutputFormat::Human,
+            with_content: false,
+            no_interactive: false,
         };
         assert_eq!(
             input_args.into_args(),
@@ -209,6 +246,9 @@ mod test_input_args_validation {
             exclude_glob: None,
             count: valid_args.count.unwrap(),
             min_similarity_ratio: None,
+            format: OutputFormat::Human,
+            with_content: false,
+            no_interactive: false,
         };
         assert_eq!(
             input_args.into_args(),
@@ -236,6 +276,9 @@ mod test_input_args_validation {
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
             min_similarity_ratio: None,
+            format: OutputFormat::Human,
+            with_content: false,
+            no_interactive: false,
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
@@ -254,6 +297,9 @@ mod test_input_args_validation {
             exclude_glob: Some(vec!["*.yml".to_owned()]),
             count: valid_args.count.unwrap(),
             min_similarity_ratio: None,
+            format: OutputFormat::Human,
+            with_content: false,
+            no_interactive: false,
         };
         assert_eq!(
             input_args_wrong_ref_file.into_args(),
@@ -307,6 +353,32 @@ fn cli_run_search(args: &Args) -> Result<Vec<FileComparison>, String> {
     });
     bar.finish_and_clear();
     result.map_err(|e| e.to_string())
+}
+
+/// One row of `--format json` output. Built in the CLI so the library and the
+/// Python module never reference `serde`, which keeps it dead-code-eliminated
+/// from the wheel (see ADR-0002).
+#[derive(serde::Serialize)]
+struct JsonComparison {
+    path: String,
+    similarity_ratio: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+}
+
+/// Serialize the ranked comparisons as a pretty JSON array. `content` is
+/// included only when `with_content` is set. Serialization of these plain
+/// fields cannot fail.
+fn comparisons_to_json(file_comparisons: &[FileComparison], with_content: bool) -> String {
+    let rows: Vec<JsonComparison> = file_comparisons
+        .iter()
+        .map(|fc| JsonComparison {
+            path: fc.path.display().to_string(),
+            similarity_ratio: fc.similarity_ratio,
+            content: with_content.then(|| fc.content.clone()),
+        })
+        .collect();
+    serde_json::to_string_pretty(&rows).expect("JSON serialization of comparisons cannot fail")
 }
 
 fn output_detailed_diff(reference_string: &str, candidate_content: &str) {
