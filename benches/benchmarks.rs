@@ -62,6 +62,7 @@ fn bench_run_search(c: &mut Criterion) {
             search_path.clone(),
             Some(10_000),
             count,
+            None,
             vec!["*.py".to_string()],
             vec![],
         )

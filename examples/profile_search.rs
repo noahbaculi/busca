@@ -40,6 +40,7 @@ fn main() {
         search_path,
         Some(10_000),
         Some(1),
+        None,
         vec!["*.py".to_string()],
         vec![],
     )

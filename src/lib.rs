@@ -21,6 +21,9 @@ pub enum Error {
         source: glob::PatternError,
     },
     SearchPathNotFound(PathBuf),
+    InvalidSimilarityRatio {
+        value: f32,
+    },
 }
 
 impl fmt::Display for Error {
@@ -32,6 +35,13 @@ impl fmt::Display for Error {
             Error::SearchPathNotFound(path) => {
                 write!(f, "search path not found: {}", path.display())
             }
+            Error::InvalidSimilarityRatio { value } => {
+                if value.is_nan() {
+                    write!(f, "min_similarity_ratio must be a number, got NaN")
+                } else {
+                    write!(f, "min_similarity_ratio must be in [0.0, 1.0], got {value}")
+                }
+            }
         }
     }
 }
@@ -41,6 +51,7 @@ impl std::error::Error for Error {
         match self {
             Error::InvalidGlob { source, .. } => Some(source),
             Error::SearchPathNotFound(_) => None,
+            Error::InvalidSimilarityRatio { .. } => None,
         }
     }
 }
@@ -170,6 +181,7 @@ mod busca_py {
             search_path,
             max_file_lines,
             count,
+            None,
             include_glob,
             exclude_glob,
         )
@@ -205,6 +217,7 @@ pub struct Args {
     pub(crate) include_glob: Option<Vec<Pattern>>,
     pub(crate) exclude_glob: Option<Vec<Pattern>>,
     pub count: Option<usize>,
+    pub min_similarity_ratio: Option<f32>,
 }
 
 impl Args {
@@ -213,11 +226,17 @@ impl Args {
         search_path: PathBuf,
         max_file_lines: Option<usize>,
         count: Option<usize>,
+        min_similarity_ratio: Option<f32>,
         include_glob: Vec<String>,
         exclude_glob: Vec<String>,
     ) -> Result<Self, Error> {
         if !search_path.is_file() && !search_path.is_dir() {
             return Err(Error::SearchPathNotFound(search_path));
+        }
+        if let Some(min) = min_similarity_ratio {
+            if min.is_nan() || !(0.0..=1.0).contains(&min) {
+                return Err(Error::InvalidSimilarityRatio { value: min });
+            }
         }
         let include_glob = parse_glob_vec(include_glob)?;
         let exclude_glob = parse_glob_vec(exclude_glob)?;
@@ -228,6 +247,7 @@ impl Args {
             include_glob,
             exclude_glob,
             count,
+            min_similarity_ratio,
         })
     }
 }
@@ -376,6 +396,7 @@ mod test_run_search {
             include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_glob: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(2),
+            min_similarity_ratio: None,
         }
     }
 
@@ -441,6 +462,7 @@ mod test_run_search {
             include_glob: None,
             exclude_glob: None,
             count,
+            min_similarity_ratio: None,
         }
     }
 
@@ -754,6 +776,7 @@ mod test_compare_file {
             include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
             exclude_glob: Some(vec![Pattern::new("*.yml").unwrap()]),
             count: Some(8),
+            min_similarity_ratio: None,
         }
     }
 
@@ -904,6 +927,17 @@ mod test_error {
         };
         assert!(std::error::Error::source(&err).is_some());
     }
+
+    #[test]
+    fn invalid_similarity_ratio_display() {
+        let err = Error::InvalidSimilarityRatio { value: 1.5 };
+        assert!(
+            err.to_string().contains("min_similarity_ratio"),
+            "got: {err}"
+        );
+        let nan = Error::InvalidSimilarityRatio { value: f32::NAN };
+        assert!(nan.to_string().contains("NaN"), "got: {nan}");
+    }
 }
 
 #[cfg(test)]
@@ -918,6 +952,7 @@ mod test_run_search_with_progress {
             PathBuf::from("sample_dir_hello_world"),
             Some(5000),
             Some(2),
+            None,
             vec!["*.py".into()],
             vec!["*.yml".into()],
         )
@@ -945,6 +980,7 @@ mod test_args_new {
             PathBuf::from("sample_dir_hello_world"),
             Some(1000),
             Some(5),
+            None,
             vec!["*.py".into()],
             vec!["*.yml".into()],
         )
@@ -962,6 +998,7 @@ mod test_args_new {
             PathBuf::from("sample_dir_hello_world"),
             None,
             None,
+            None,
             vec![],
             vec![],
         )
@@ -975,6 +1012,7 @@ mod test_args_new {
         let result = Args::new(
             "ref".into(),
             PathBuf::from("sample_dir_hello_world"),
+            None,
             None,
             None,
             vec!["[".into()],
@@ -993,6 +1031,7 @@ mod test_args_new {
             PathBuf::from("sample_dir_hello_world"),
             None,
             None,
+            None,
             vec![],
             vec!["[".into()],
         );
@@ -1002,11 +1041,61 @@ mod test_args_new {
     #[test]
     fn missing_search_path_errors() {
         let bogus = PathBuf::from("/definitely/not/a/real/path/xyz123");
-        let result = Args::new("ref".into(), bogus.clone(), None, None, vec![], vec![]);
+        let result = Args::new("ref".into(), bogus.clone(), None, None, None, vec![], vec![]);
         match result {
             Err(Error::SearchPathNotFound(p)) => assert_eq!(p, bogus),
             other => panic!("expected SearchPathNotFound, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn rejects_nan_min_similarity_ratio() {
+        let result = Args::new(
+            "ref".into(),
+            PathBuf::from("sample_dir_hello_world"),
+            None,
+            None,
+            Some(f32::NAN),
+            vec![],
+            vec![],
+        );
+        assert!(matches!(
+            result,
+            Err(Error::InvalidSimilarityRatio { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_out_of_range_min_similarity_ratio() {
+        for bad in [1.5_f32, -0.1] {
+            let result = Args::new(
+                "ref".into(),
+                PathBuf::from("sample_dir_hello_world"),
+                None,
+                None,
+                Some(bad),
+                vec![],
+                vec![],
+            );
+            assert!(
+                matches!(result, Err(Error::InvalidSimilarityRatio { .. })),
+                "expected error for {bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_valid_min_similarity_ratio() {
+        let result = Args::new(
+            "ref".into(),
+            PathBuf::from("sample_dir_hello_world"),
+            None,
+            None,
+            Some(0.5),
+            vec![],
+            vec![],
+        );
+        assert!(result.is_ok());
     }
 }
 
