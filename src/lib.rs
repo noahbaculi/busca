@@ -300,6 +300,10 @@ where
                         Ok(dir_entry) => compare_file(dir_entry, args, &args.reference_string),
                         Err(_) => None,
                     };
+                    let out = out.filter(|fc| match args.min_similarity_ratio {
+                        Some(min) => fc.similarity_ratio >= min,
+                        None => true,
+                    });
                     let d = done.fetch_add(1, Ordering::Relaxed) + 1;
                     on_progress(d, total);
                     out
@@ -316,11 +320,12 @@ where
         }
         Some(count) => {
             let reference_index = ReferenceIndex::new(&args.reference_string);
+            let floor = args.min_similarity_ratio.unwrap_or(0.0);
             let collected = dir_entries
                 .into_par_iter()
                 .enumerate()
                 .fold(
-                    || TopN::new(count),
+                    || TopN::new(count, floor),
                     |mut heap, (walk_index, dir_entry_result)| {
                         if let Ok(dir_entry) = dir_entry_result {
                             if let Some(comparison) =
@@ -334,7 +339,7 @@ where
                         heap
                     },
                 )
-                .reduce(|| TopN::new(count), TopN::merge);
+                .reduce(|| TopN::new(count, floor), TopN::merge);
 
             Ok(collected.into_sorted_vec())
         }
@@ -481,6 +486,34 @@ mod test_run_search {
         // Guard against accidental mutation of `reference` above.
         reference.truncate(0);
         assert!(reference.is_empty());
+    }
+
+    #[test]
+    fn bounded_with_min_matches_unbounded_filtered() {
+        // The reference behavior: take the full ranking, drop anything below
+        // `min`, then truncate to `count`. The bounded path must equal it for
+        // every (min, count), and the unbounded-with-min path must equal the
+        // filtered ranking.
+        let with_min = |count, min| Args {
+            min_similarity_ratio: min,
+            ..args_with_count(count)
+        };
+        let full = run_search(&with_min(None, None)).unwrap();
+        for min in [0.0_f32, 0.2, 0.5, 1.0] {
+            let filtered: Vec<FileComparison> = full
+                .iter()
+                .filter(|c| c.similarity_ratio >= min)
+                .cloned()
+                .collect();
+            for n in [1usize, 2, 50] {
+                let mut expected = filtered.clone();
+                expected.truncate(n);
+                let bounded = run_search(&with_min(Some(n), Some(min))).unwrap();
+                assert_eq!(bounded, expected, "bounded mismatch at min {min} count {n}");
+            }
+            let unbounded = run_search(&with_min(None, Some(min))).unwrap();
+            assert_eq!(unbounded, filtered, "unbounded mismatch at min {min}");
+        }
     }
 
     #[test]
@@ -699,13 +732,15 @@ impl Ord for HeapEntry {
 /// Backed by a max-heap whose top is the next entry to evict.
 struct TopN {
     capacity: usize,
+    floor: f32,
     heap: BinaryHeap<HeapEntry>,
 }
 
 impl TopN {
-    fn new(capacity: usize) -> Self {
+    fn new(capacity: usize, floor: f32) -> Self {
         Self {
             capacity,
+            floor,
             heap: BinaryHeap::new(),
         }
     }
@@ -716,6 +751,9 @@ impl TopN {
     /// threshold are resolved by the true ratio and walk index, not pruned.
     fn should_compute(&self, upper_bound: f32) -> bool {
         if self.capacity == 0 {
+            return false;
+        }
+        if upper_bound < self.floor {
             return false;
         }
         if self.heap.len() < self.capacity {
@@ -736,6 +774,9 @@ impl TopN {
 
     fn push_entry(&mut self, entry: HeapEntry) {
         if self.capacity == 0 {
+            return;
+        }
+        if entry.comparison.similarity_ratio < self.floor {
             return;
         }
         self.heap.push(entry);
@@ -1226,7 +1267,7 @@ mod test_topn {
 
     #[test]
     fn keeps_highest_ratios_sorted_descending() {
-        let mut top = TopN::new(2);
+        let mut top = TopN::new(2, 0.0);
         top.push(0, fc("a", 0.1));
         top.push(1, fc("b", 0.9));
         top.push(2, fc("c", 0.5));
@@ -1241,7 +1282,7 @@ mod test_topn {
 
     #[test]
     fn ties_break_by_walk_index_ascending() {
-        let mut top = TopN::new(2);
+        let mut top = TopN::new(2, 0.0);
         // Equal ratios; lower walk index must win and sort first.
         top.push(5, fc("late", 0.5));
         top.push(1, fc("early", 0.5));
@@ -1257,7 +1298,7 @@ mod test_topn {
 
     #[test]
     fn should_compute_is_false_only_when_full_and_below_threshold() {
-        let mut top = TopN::new(2);
+        let mut top = TopN::new(2, 0.0);
         assert!(top.should_compute(0.0), "not full: always compute");
         top.push(0, fc("a", 0.4));
         top.push(1, fc("b", 0.6));
@@ -1272,18 +1313,41 @@ mod test_topn {
 
     #[test]
     fn capacity_zero_never_computes_and_is_empty() {
-        let mut top = TopN::new(0);
+        let mut top = TopN::new(0, 0.0);
         assert!(!top.should_compute(1.0));
         top.push(0, fc("a", 1.0));
         assert!(top.into_sorted_vec().is_empty());
     }
 
     #[test]
+    fn floor_rejects_entries_below_threshold() {
+        let mut top = TopN::new(5, 0.5);
+        top.push(0, fc("low", 0.4));
+        top.push(1, fc("at", 0.5));
+        top.push(2, fc("high", 0.9));
+        let out = top.into_sorted_vec();
+        assert_eq!(
+            out.iter()
+                .map(|c| c.path.to_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["high", "at"]
+        );
+    }
+
+    #[test]
+    fn floor_should_compute_rejects_below_floor_even_when_not_full() {
+        let top = TopN::new(5, 0.5);
+        assert!(!top.should_compute(0.49), "below floor: prune");
+        assert!(top.should_compute(0.5), "at floor: compute (tie safety)");
+        assert!(top.should_compute(0.8), "above floor: compute");
+    }
+
+    #[test]
     fn merge_keeps_global_top_n() {
-        let mut a = TopN::new(2);
+        let mut a = TopN::new(2, 0.0);
         a.push(0, fc("a", 0.9));
         a.push(1, fc("b", 0.2));
-        let mut b = TopN::new(2);
+        let mut b = TopN::new(2, 0.0);
         b.push(2, fc("c", 0.7));
         b.push(3, fc("d", 0.1));
         let out = a.merge(b).into_sorted_vec();
