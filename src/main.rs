@@ -31,21 +31,16 @@ fn parse_similarity_ratio(s: &str) -> Result<f32, String> {
 
 fn main() {
     let input_args = InputArgs::parse();
-    let min_similarity_ratio = input_args.min_similarity_ratio;
-    let user_count = input_args.count;
 
     let args = match input_args.into_args() {
         Ok(args) => args,
         Err(err_str) => graceful_panic(&err_str),
     };
 
-    let raw_comparisons = match cli_run_search(&args) {
+    let file_comparisons = match cli_run_search(&args) {
         Ok(search_results) => search_results,
         Err(err_str) => graceful_panic(&err_str),
     };
-
-    let mut file_comparisons = apply_min_similarity_ratio(raw_comparisons, min_similarity_ratio);
-    file_comparisons.truncate(user_count);
 
     if file_comparisons.is_empty() {
         println!("No files found that match the criteria.");
@@ -149,7 +144,7 @@ impl InputArgs {
             search_path,
             Some(self.max_file_lines),
             Some(self.count),
-            None,
+            self.min_similarity_ratio,
             self.include_glob.unwrap_or_default(),
             self.exclude_glob.unwrap_or_default(),
         )
@@ -367,16 +362,6 @@ impl fmt::Display for Line {
     }
 }
 
-fn apply_min_similarity_ratio(
-    mut comparisons: Vec<FileComparison>,
-    min: Option<f32>,
-) -> Vec<FileComparison> {
-    if let Some(min) = min {
-        comparisons.retain(|c| c.similarity_ratio >= min);
-    }
-    comparisons
-}
-
 #[cfg(test)]
 mod test_cli_run_search {
     use super::*;
@@ -463,82 +448,6 @@ mod test_cli_run_search {
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
 
-    #[test]
-    fn min_similarity_ratio_filters_below_threshold() {
-        let input = vec![
-            FileComparison {
-                path: PathBuf::from("a"),
-                similarity_ratio: 0.9,
-                content: String::new(),
-            },
-            FileComparison {
-                path: PathBuf::from("b"),
-                similarity_ratio: 0.2,
-                content: String::new(),
-            },
-            FileComparison {
-                path: PathBuf::from("c"),
-                similarity_ratio: 0.0,
-                content: String::new(),
-            },
-        ];
-        let filtered = apply_min_similarity_ratio(input.clone(), Some(0.25));
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].path, PathBuf::from("a"));
-
-        let unfiltered = apply_min_similarity_ratio(input, None);
-        assert_eq!(unfiltered.len(), 3);
-    }
-
-    #[test]
-    fn sort_then_filter_then_truncate_pipeline() {
-        let args = Args::new(
-            fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py").unwrap(),
-            PathBuf::from("sample_dir_hello_world"),
-            Some(5000),
-            None,
-            None,
-            vec!["*.py".into()],
-            vec![],
-        )
-        .unwrap();
-
-        let raw = cli_run_search(&args).unwrap();
-        for pair in raw.windows(2) {
-            assert!(
-                pair[0].similarity_ratio >= pair[1].similarity_ratio,
-                "cli_run_search must return descending ratios, got {:?} then {:?}",
-                pair[0].similarity_ratio,
-                pair[1].similarity_ratio,
-            );
-        }
-
-        let threshold = 0.25_f32;
-        let user_count = 1_usize;
-        let mut filtered = apply_min_similarity_ratio(raw.clone(), Some(threshold));
-        filtered.truncate(user_count);
-
-        assert!(filtered.len() <= user_count);
-        for c in &filtered {
-            assert!(
-                c.similarity_ratio >= threshold,
-                "{} = {} < {}",
-                c.path.display(),
-                c.similarity_ratio,
-                threshold,
-            );
-        }
-        let expected_full: Vec<_> = raw
-            .iter()
-            .filter(|c| c.similarity_ratio >= threshold)
-            .take(user_count)
-            .cloned()
-            .collect();
-        assert_eq!(filtered, expected_full);
-
-        let none_left = apply_min_similarity_ratio(raw.clone(), Some(1.0001));
-        assert!(none_left.is_empty(), "threshold >1 must filter everything");
-    }
 }
 
 #[cfg(test)]
