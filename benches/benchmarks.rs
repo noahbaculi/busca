@@ -3,6 +3,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use std::fs;
 use std::hint::black_box;
 use std::path::PathBuf;
+use walkdir::WalkDir;
 
 /// Benchmarks the pure `TextDiff::ratio()` hot path on a fixed, committed pair
 /// of sample files. Deterministic and free of any external fixture.
@@ -72,5 +73,41 @@ fn bench_run_search(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_get_similarity_ratio, bench_run_search);
+/// Benchmarks the directory walk in isolation: the single-threaded `WalkDir`
+/// traversal that `run_search_with_progress` runs to completion before any
+/// parallel scoring begins. Read against the `run_search` variants, its median
+/// gives the walk's share of total search time. That share is the measurement
+/// audit finding B4 (parallel walk) needs before any walk work starts. Uses the
+/// same Django fixture and skip-if-absent guard as `bench_run_search`.
+fn bench_walk(c: &mut Criterion) {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let search_path = manifest.join("sample-comprehensive/django");
+    if !search_path.is_dir() {
+        eprintln!(
+            "skipping walk benchmark: fixture '{}' not found.\n\
+             Clone it with:\n  \
+             git clone --depth 1 --branch 5.2.15 https://github.com/django/django.git sample-comprehensive",
+            search_path.display()
+        );
+        return;
+    }
+
+    // Identical work to production: WalkDir::new(path).into_iter().collect into
+    // a Vec of Results, before any filtering or scoring. criterion black-boxes
+    // the returned Vec, so the collect is not optimized away.
+    c.bench_function("walk", |b| {
+        b.iter(|| {
+            WalkDir::new(black_box(&search_path))
+                .into_iter()
+                .collect::<Vec<_>>()
+        })
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_get_similarity_ratio,
+    bench_run_search,
+    bench_walk
+);
 criterion_main!(benches);
