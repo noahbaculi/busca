@@ -21,7 +21,7 @@ The end-to-end operation: walk the search root, filter to candidates, score each
 _Avoid_: scan, lookup
 
 **Comparison** (`FileComparison`):
-The result of scoring one candidate against the reference. Holds the candidate's path, its `similarity_ratio`, and its contents. A comparison is produced for every candidate, including ones with `similarity_ratio == 0.0`.
+The result of scoring one candidate against the reference. Holds the candidate's path, its `similarity_ratio`, and its contents. A comparison is produced for every candidate at or above `min_similarity_ratio` (every candidate when it is unset), including ones with `similarity_ratio == 0.0`.
 _Avoid_: FileMatch, match, hit, result
 
 **Similarity ratio** (`similarity_ratio`):
@@ -43,6 +43,13 @@ _Avoid_: limit, top_k, results
 **`format_file_comparisons`**:
 A library-side presentation helper that returns the ranked CLI-style summary as a `String`. Kept public for embedders who want the same view without reimplementing the grid. Not a core data API.
 
+**`min_similarity_ratio`**:
+A floor in `[0.0, 1.0]` applied during the search. Candidates whose
+`similarity_ratio` is below it are dropped before ranking and before `count`
+truncation. Unset means no floor. Shared by the CLI flag, `Args`, and
+`busca_py.search`.
+_Avoid_: min_score, threshold (as a vague term), cutoff
+
 ## Flagged ambiguities
 
 - **"match"**: historically used both for "we produced a result for this file" and for "this file actually resembles the reference." Resolved by reserving `FileComparison` for the former and reading `similarity_ratio` for the latter. The Rust type `FileMatch` and the Python `FileMatch` class were renamed to `FileComparison` in 3.0.0.
@@ -52,7 +59,7 @@ A library-side presentation helper that returns the ranked CLI-style summary as 
 
 **Dev**: I ran busca with `--ref-file-path foo.py --search-path ./src` and got a `FileComparison` for `unrelated.json` with `similarity_ratio == 0.0`. Is that a bug?
 
-**Domain**: No. Every candidate that passes the include/exclude globs and `max_file_lines` produces a comparison, even a zero one. If you want to suppress those, narrow the include glob or take a smaller `count`.
+**Domain**: No. Every candidate that passes the include/exclude globs and `max_file_lines` produces a comparison, even a zero one, unless you set `min_similarity_ratio`, which drops candidates below the floor. If you want to suppress zero comparisons, narrow the include glob, raise `min_similarity_ratio`, or take a smaller `count`.
 
 **Dev**: Got it. And `similarity_ratio` of `0.43`, that means 43% of the reference lines appear in the candidate?
 

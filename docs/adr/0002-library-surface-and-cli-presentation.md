@@ -18,3 +18,8 @@ The motivation is forward-compatibility headroom. The library should be able to 
 `run_search_with_progress` was added late in the design pass. It takes a `Fn(u64, u64) + Send + Sync` callback. The CLI binary uses it to drive its `indicatif` bar without the library depending on `indicatif`. External callers who do not need progress reporting can use `run_search`, which is a one-line wrapper.
 
 `Args` is marked `#[non_exhaustive]` so fields can be added in future minor releases. `Error` is also `#[non_exhaustive]` so new variants can be added (for example a `ReferenceUnreadable` variant if a future `load_reference_from_path` helper lands).
+
+JSON output (added in 3.0.0, see ADR-0004) follows the same principle:
+`--format json` is serialized in the CLI binary, not the library, so the public
+surface does not grow a JSON helper and `serde` stays out of the code reachable
+from the PyO3 module.

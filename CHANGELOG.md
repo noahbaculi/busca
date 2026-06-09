@@ -18,6 +18,16 @@ Sync`. Library entry point used by the CLI to drive its progress bar
   without the library depending on `indicatif`.
 - README "Versioning" section declaring the Rust MSRV, Python MSRV, and the
   public Rust surface covered by semver.
+- `--format <human|json>` CLI flag for structured output, with `--with-content`
+  to include each file's body in the JSON. JSON carries `path` and
+  `similarity_ratio` (and `content` when requested).
+- `--no-interactive` CLI flag to print the ranked grid instead of launching the
+  interactive picker.
+- `min_similarity_ratio` is now a search parameter on `Args`/`run_search` and a
+  `busca_py.search` kwarg, not just a CLI post-filter. The bounded search uses it
+  as an additional pruning floor.
+- `busca::Error::InvalidSimilarityRatio` variant, returned by `Args::new` when
+  `min_similarity_ratio` is NaN or outside `[0.0, 1.0]`.
 
 ### Performance
 
@@ -62,6 +72,11 @@ the rationale behind the similarity metric.
 | `Cargo.toml` had no `rust-version`                                                                      | `rust-version = "1.80"`                                                                          |
 
 - `Args.include_glob` and `Args.exclude_glob` were `pub Option<Vec<glob::Pattern>>`; they are now `pub(crate)`. Library callers go through `Args::new` with string globs.
+- `Args::new` gains a `min_similarity_ratio: Option<f32>` parameter, positioned
+  after `count` and before the globs.
+- CLI exit codes now follow grep: `0` when at least one comparison matches, `1`
+  when none match (previously `0` with a stdout message), and `2` on error
+  (previously `1`). The empty-result message moved from stdout to stderr.
 
 ### Removed
 

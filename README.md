@@ -109,6 +109,12 @@ Options:
           Number of results to display [default: 10]
       --min-similarity-ratio <MIN_SIMILARITY_RATIO>
           Drop comparisons whose similarity ratio is below this value (in [0.0, 1.0]). Applied after sorting and before --count truncation
+      --format <FORMAT>
+          Output format for the ranked results [default: human] [possible values: human, json]
+      --with-content
+          Include each file's content in JSON output. Ignored for the human format
+      --no-interactive
+          Print the ranked list instead of launching the interactive picker
   -h, --help
           Print help
   -V, --version
@@ -192,6 +198,30 @@ busca_cmd_output echo 'String to find in files.'
 ```
 
 </details>
+
+##### Structured output for scripts
+
+```shell
+busca --ref-file-path path_to_reference.py --include-glob '*.py' --format json
+```
+
+```json
+[
+  { "path": "src/file_5.py", "similarity_ratio": 1.0 },
+  { "path": "src/file_5v2.py", "similarity_ratio": 0.9722 }
+]
+```
+
+Add `--with-content` to include each file's body. `--format json` is always
+non-interactive; for the human grid without the picker, use `--no-interactive`.
+
+busca uses these exit codes so scripts can branch on the result:
+
+| Exit code | Meaning |
+| --------- | ------- |
+| `0` | At least one comparison survived `--min-similarity-ratio` and `--count` |
+| `1` | No comparisons matched |
+| `2` | An error occurred (bad glob, missing search path, unreadable reference) |
 
 ## Versioning
 
