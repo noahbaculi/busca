@@ -485,6 +485,46 @@ impl<'a> ReferenceIndex<'a> {
     }
 }
 
+/// Length-only upper bound on `similar`'s ratio: matches cannot exceed the
+/// shorter token sequence. Nearly free, used as a pre-filter.
+#[allow(dead_code)] // wired into the bounded search path below
+fn real_quick_ratio(ref_len: usize, cand_len: usize) -> f32 {
+    let total = ref_len + cand_len;
+    if total == 0 {
+        return 1.0;
+    }
+    2.0 * ref_len.min(cand_len) as f32 / total as f32
+}
+
+/// Line-multiset upper bound on `similar`'s ratio: matches cannot exceed the
+/// multiset intersection of the two line sequences. Tighter than
+/// `real_quick_ratio` and always less than or equal to it.
+#[allow(dead_code)] // wired into the bounded search path below
+fn quick_ratio_bound(
+    ref_counts: &HashMap<&str, u32>,
+    ref_len: usize,
+    cand_counts: &HashMap<&str, u32>,
+    cand_len: usize,
+) -> f32 {
+    let total = ref_len + cand_len;
+    if total == 0 {
+        return 1.0;
+    }
+    // Iterate the smaller map; the intersection sum is symmetric.
+    let (small, large) = if cand_counts.len() <= ref_counts.len() {
+        (cand_counts, ref_counts)
+    } else {
+        (ref_counts, cand_counts)
+    };
+    let mut matches = 0u32;
+    for (token, &count) in small {
+        if let Some(&other) = large.get(token) {
+            matches += count.min(other);
+        }
+    }
+    2.0 * matches as f32 / total as f32
+}
+
 #[cfg(test)]
 mod test_compare_file {
     use super::*;
@@ -813,5 +853,55 @@ mod test_line_tokens {
         assert_eq!(len, 3);
         assert_eq!(counts.get("a\n"), Some(&2));
         assert_eq!(counts.get("b\n"), Some(&1));
+    }
+}
+
+#[cfg(test)]
+mod test_upper_bounds {
+    use super::*;
+
+    fn quick_ratio(a: &str, b: &str) -> f32 {
+        let (ca, la) = line_counts(a);
+        let (cb, lb) = line_counts(b);
+        quick_ratio_bound(&ca, la, &cb, lb)
+    }
+
+    #[test]
+    fn real_quick_ratio_is_one_for_equal_lengths_all_match() {
+        // Identical inputs: bound is 1.0 and the true ratio is 1.0.
+        assert_eq!(real_quick_ratio(3, 3), 1.0);
+    }
+
+    #[test]
+    fn both_bounds_are_at_least_the_true_ratio() {
+        let pairs = [
+            ("a\nb\nc\n", "a\nb\nc\n"),
+            ("a\nb\nc\n", "a\nx\nc\n"),
+            ("a\nb\nc\nd\n", "d\nc\nb\na\n"),
+            ("a\nb\n", "a\nb\nc\nd\ne\n"),
+            ("totally\ndifferent\n", "nothing\nmatches\nhere\n"),
+        ];
+        for (a, b) in pairs {
+            let (_, la) = line_counts(a);
+            let (_, lb) = line_counts(b);
+            let truth = get_similarity_ratio(a, b);
+            let rq = real_quick_ratio(la, lb);
+            let q = quick_ratio(a, b);
+            assert!(
+                rq >= truth - 1e-6,
+                "real_quick {rq} < truth {truth} for {a:?},{b:?}"
+            );
+            assert!(
+                q >= truth - 1e-6,
+                "quick {q} < truth {truth} for {a:?},{b:?}"
+            );
+            assert!(q <= rq + 1e-6, "quick {q} should be <= real_quick {rq}");
+        }
+    }
+
+    #[test]
+    fn empty_inputs_bound_is_one() {
+        assert_eq!(real_quick_ratio(0, 0), 1.0);
+        assert_eq!(quick_ratio("", ""), 1.0);
     }
 }
