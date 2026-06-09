@@ -63,13 +63,14 @@ fn main() {
         }
         OutputFormat::Human => {
             let file_comparisons_output = format_file_comparisons(&file_comparisons);
-            let interactive = interactive_input_mode() && !no_interactive;
+            let is_tty = interactive_input_mode();
+            let interactive = is_tty && !no_interactive;
 
             if !interactive {
                 println!("{}", file_comparisons_output);
                 // Explain the missing picker only on automatic fallback, and on
                 // stderr so stdout stays clean for parsing.
-                if !interactive_input_mode() && !no_interactive {
+                if !is_tty && !no_interactive {
                     eprintln!("Note: interactive prompt is not supported in this mode.");
                 }
                 return;
@@ -130,7 +131,7 @@ struct InputArgs {
     count: usize,
 
     /// Drop comparisons whose similarity ratio is below this value (in [0.0, 1.0]).
-    /// Applied after sorting and before --count truncation.
+    /// Applied during the search, before the --count limit.
     #[arg(long, value_parser = parse_similarity_ratio)]
     min_similarity_ratio: Option<f32>,
 
@@ -519,7 +520,6 @@ mod test_cli_run_search {
         ];
         assert_eq!(cli_run_search(&valid_args).unwrap(), expected);
     }
-
 }
 
 #[cfg(test)]

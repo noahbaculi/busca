@@ -118,7 +118,7 @@ Options:
   -c, --count <COUNT>
           Number of results to display [default: 10]
       --min-similarity-ratio <MIN_SIMILARITY_RATIO>
-          Drop comparisons whose similarity ratio is below this value (in [0.0, 1.0]). Applied after sorting and before --count truncation
+          Drop comparisons whose similarity ratio is below this value (in [0.0, 1.0]). Applied during the search, before the --count limit
       --format <FORMAT>
           Output format for the ranked results [default: human] [possible values: human, json]
       --with-content
@@ -233,9 +233,13 @@ busca uses these exit codes so scripts can branch on the result:
 | `1` | No comparisons matched |
 | `2` | An error occurred (bad glob, missing search path, unreadable reference) |
 
+On an empty result busca writes nothing to stdout, prints `No files found` to
+stderr, and exits `1`, so scripts should branch on the exit code rather than
+parse stdout for an empty array.
+
 ## Versioning
 
-- **Rust MSRV**: 1.80 (enforced via `Cargo.toml` `rust-version`).
+- **Rust MSRV**: 1.85 (enforced via `Cargo.toml` `rust-version`).
 - **Python**: 3.11 or later.
 - **Semver**: breaking changes ship on major version bumps. The Rust public surface covered by semver is `Args`, `FileComparison`, `Error`, `run_search`, `run_search_with_progress`, `get_similarity_ratio`, and `format_file_comparisons`. Items not in this list are implementation details and may change in any release.
 - **Python public surface**: `busca_py.search` and `busca_py.FileComparison` as declared in `busca_py.pyi`.

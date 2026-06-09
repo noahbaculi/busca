@@ -8,8 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `--min-similarity-ratio <FLOAT>` CLI flag. Filters out comparisons below the
-  given threshold after sorting but before `--count` truncation.
+- `--min-similarity-ratio <FLOAT>` CLI flag. Drops comparisons whose similarity
+  ratio is below the given threshold during the search, before the `--count`
+  limit.
 - `busca::Error` enum (`#[non_exhaustive]`) returned by `Args::new` and
   propagated by `run_search`. Replaces panics on invalid globs and missing
   search paths.
@@ -69,7 +70,7 @@ the rationale behind the similarity metric.
 | `compare_files` was `pub` and took `ParallelIterator<Item = Result<walkdir::DirEntry, walkdir::Error>>` | removed; library callers use `run_search` or `run_search_with_progress`                          |
 | `Args { ... }` struct-literal construction outside the crate                                            | `Args::new(...)` only (`Args` is now `#[non_exhaustive]`)                                        |
 | `requires-python = ">=3.7"`                                                                             | `requires-python = ">=3.11"`                                                                     |
-| `Cargo.toml` had no `rust-version`                                                                      | `rust-version = "1.80"`                                                                          |
+| `Cargo.toml` had no `rust-version`                                                                      | `rust-version = "1.85"`                                                                          |
 
 - `Args.include_glob` and `Args.exclude_glob` were `pub Option<Vec<glob::Pattern>>`; they are now `pub(crate)`. Library callers go through `Args::new` with string globs.
 - `Args::new` gains a `min_similarity_ratio: Option<f32>` parameter, positioned
@@ -82,6 +83,14 @@ the rationale behind the similarity metric.
 
 - `atty` dependency. Replaced by `std::io::IsTerminal` (in std since Rust 1.70).
   Removes exposure to RUSTSEC-2021-0145.
+
+### Dependencies
+
+- Updated all dependencies to their latest releases, including `similar` 2 -> 3
+  and `pyo3` 0.27 -> 0.28. `similar` 3 keeps the same `ratio()` definition, so
+  the similarity scores and the top-N pruning bounds are unchanged. The `pyo3`
+  module is marked `gil_used = true` to keep requiring the GIL rather than
+  advertise free-threaded support. These bumps set the 1.85 MSRV above.
 
 ### Fixed
 

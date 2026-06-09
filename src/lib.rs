@@ -56,7 +56,10 @@ impl std::error::Error for Error {
     }
 }
 
-#[pyclass(get_all)]
+// FileComparison is a result object: it is returned to callers and constructed
+// via its `#[new]`, never passed back into Rust as an argument. pyo3 0.28 makes
+// the FromPyObject derive opt-in for Clone pyclasses, so we skip it.
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileComparison {
     pub path: PathBuf,
@@ -149,7 +152,11 @@ pub fn format_file_comparisons(file_comparisons: &[FileComparison]) -> String {
 
 /// A Python module of the Rust `busca` file matching library.
 /// https://github.com/noahbaculi/busca
-#[pymodule]
+// pyo3 0.28 lets modules advertise free-threaded support by default. busca
+// targets GIL-based CPython and PyPy and has not been audited for the
+// free-threaded build, so we require the GIL rather than claim support we have
+// not verified.
+#[pymodule(gil_used = true)]
 mod busca_py {
     use super::*;
 
@@ -223,6 +230,16 @@ pub struct Args {
 }
 
 impl Args {
+    /// Builds an [`Args`] from raw inputs, validating the search path, the
+    /// similarity floor, and the globs.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::SearchPathNotFound`] if `search_path` is neither an existing
+    ///   file nor a directory.
+    /// - [`Error::InvalidSimilarityRatio`] if `min_similarity_ratio` is NaN or
+    ///   outside `[0.0, 1.0]`.
+    /// - [`Error::InvalidGlob`] if any include or exclude glob fails to parse.
     pub fn new(
         reference_string: String,
         search_path: PathBuf,
@@ -270,10 +287,25 @@ fn parse_glob_vec(globs: Vec<String>) -> Result<Option<Vec<Pattern>>, Error> {
         .map(Some)
 }
 
+/// Runs [`run_search_with_progress`] with a no-op progress callback.
+///
+/// # Errors
+///
+/// Propagates any [`Error`] from [`run_search_with_progress`].
 pub fn run_search(args: &Args) -> Result<Vec<FileComparison>, Error> {
     run_search_with_progress(args, |_, _| {})
 }
 
+/// Walks `args.search_path`, scores each surviving candidate against
+/// `args.reference_string`, and returns the comparisons ranked by descending
+/// `similarity_ratio`. `on_progress` is called once per walked entry with
+/// `(done, total)`.
+///
+/// # Errors
+///
+/// Returns [`Error`] if the search cannot complete. Directory entries that
+/// cannot be read are skipped rather than propagated, so a search built from a
+/// valid [`Args`] currently runs to completion.
 pub fn run_search_with_progress<F>(
     args: &Args,
     on_progress: F,
@@ -1084,7 +1116,15 @@ mod test_args_new {
     #[test]
     fn missing_search_path_errors() {
         let bogus = PathBuf::from("/definitely/not/a/real/path/xyz123");
-        let result = Args::new("ref".into(), bogus.clone(), None, None, None, vec![], vec![]);
+        let result = Args::new(
+            "ref".into(),
+            bogus.clone(),
+            None,
+            None,
+            None,
+            vec![],
+            vec![],
+        );
         match result {
             Err(Error::SearchPathNotFound(p)) => assert_eq!(p, bogus),
             other => panic!("expected SearchPathNotFound, got {:?}", other),
@@ -1102,10 +1142,7 @@ mod test_args_new {
             vec![],
             vec![],
         );
-        assert!(matches!(
-            result,
-            Err(Error::InvalidSimilarityRatio { .. })
-        ));
+        assert!(matches!(result, Err(Error::InvalidSimilarityRatio { .. })));
     }
 
     #[test]
@@ -1167,8 +1204,8 @@ mod test_line_tokens {
 
     #[test]
     fn line_counts_match_textdiff_tokenization() {
-        // `from_lines(s, "").old_slices()` is exactly how `similar` tokenizes the
-        // old side, so `line_counts` must agree on count and on every token.
+        // `from_lines(s, "").iter_old_slices()` is exactly how `similar` tokenizes
+        // the old side, so `line_counts` must agree on count and on every token.
         for s in [
             "a\nb\nc\n",
             "a\nb\nc",
@@ -1179,7 +1216,8 @@ mod test_line_tokens {
             "lone\rcarriage",
         ] {
             let (counts, len) = line_counts(s);
-            let expected: Vec<&str> = TextDiff::from_lines(s, "").old_slices().to_vec();
+            let diff = TextDiff::from_lines(s, "");
+            let expected: Vec<&str> = diff.iter_old_slices().collect();
             assert_eq!(len, expected.len(), "token count mismatch for {s:?}");
             let total: u32 = counts.values().sum();
             assert_eq!(
