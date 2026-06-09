@@ -217,8 +217,14 @@ busca --ref-file-path path_to_reference.py --include-glob '*.py' --format json
 
 ```json
 [
-  { "path": "src/file_5.py", "similarity_ratio": 1.0 },
-  { "path": "src/file_5v2.py", "similarity_ratio": 0.9722 }
+  {
+    "path": "src/file_5.py",
+    "similarity_ratio": 1.0
+  },
+  {
+    "path": "src/file_5v2.py",
+    "similarity_ratio": 0.8888889
+  }
 ]
 ```
 
