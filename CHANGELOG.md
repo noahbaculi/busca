@@ -14,10 +14,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   propagated by `run_search`. Replaces panics on invalid globs and missing
   search paths.
 - `busca::run_search_with_progress(&Args, F)` where `F: Fn(u64, u64) + Send +
-  Sync`. Library entry point used by the CLI to drive its progress bar
+Sync`. Library entry point used by the CLI to drive its progress bar
   without the library depending on `indicatif`.
 - README "Versioning" section declaring the Rust MSRV, Python MSRV, and the
   public Rust surface covered by semver.
+
+### Performance
+
+- Searches that request a fixed result count (the CLI `--count`, or `count` on
+  the Rust and Python APIs) now skip the full line diff for files that cannot
+  place in the top results. Each candidate is checked first against two cheap
+  upper bounds on `similar::TextDiff::ratio()`: a length bound, then a
+  line-multiset bound. Both are built from `similar`'s own line tokenizer, so
+  they share the tokenization of the full diff and stay true upper bounds. A
+  file is diffed in full only when its bound is at least the lowest ratio
+  currently kept. Candidates collect into a per-thread bounded heap that retains
+  only `count` results, so peak memory holds about `count` files rather than
+  every candidate's content at once. Output is byte-identical to before, tie
+  order included. On the Django 5.2.15 source tree (CI, ubuntu-latest), a top-1
+  search runs in about 43% of the unbounded time, top-10 in about 82%, and
+  top-20 in about 94%. The unbounded search (no `count`) keeps its previous code
+  path and is unchanged.
 
 ### Changed (BREAKING)
 
@@ -25,24 +42,24 @@ Ubiquitous language cleanup so the code reads in the vocabulary established by
 `CONTEXT.md`. See `docs/adr/0001-similarity-ratio-uses-textdiff-ratio.md` for
 the rationale behind the similarity metric.
 
-| Old name | New name |
-|---|---|
-| `busca_py.FileMatch` | `busca_py.FileComparison` |
-| `busca::FileMatch` | `busca::FileComparison` |
-| `FileMatch.percent_match` | `FileComparison.similarity_ratio` |
-| `FileMatch.lines` | `FileComparison.content` |
-| `busca::get_percent_matching_lines` | `busca::get_similarity_ratio` |
-| `busca::format_file_matches` | `busca::format_file_comparisons` |
-| `busca_py.search_for_lines(...)` | `busca_py.search(...)` |
-| `--max-lines` (CLI) | `--max-file-lines` |
-| `Args.max_lines` (Rust), `max_lines` (Python kwarg) | `max_file_lines` |
-| `Args.include_patterns` / `exclude_patterns` | `Args.include_glob` / `exclude_glob` |
-| `include_globs` / `exclude_globs` (Python kwargs, plural) | `include_glob` / `exclude_glob` (singular) |
-| `parse_glob_pattern` was `pub` and panicked on bad globs | `pub(crate)` and returns `Result<Pattern, busca::Error>`; library callers go through `Args::new` |
-| `compare_files` was `pub` and took `ParallelIterator<Item = Result<walkdir::DirEntry, walkdir::Error>>` | removed; library callers use `run_search` or `run_search_with_progress` |
-| `Args { ... }` struct-literal construction outside the crate | `Args::new(...)` only (`Args` is now `#[non_exhaustive]`) |
-| `requires-python = ">=3.7"` | `requires-python = ">=3.11"` |
-| `Cargo.toml` had no `rust-version` | `rust-version = "1.80"` |
+| Old name                                                                                                | New name                                                                                         |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `busca_py.FileMatch`                                                                                    | `busca_py.FileComparison`                                                                        |
+| `busca::FileMatch`                                                                                      | `busca::FileComparison`                                                                          |
+| `FileMatch.percent_match`                                                                               | `FileComparison.similarity_ratio`                                                                |
+| `FileMatch.lines`                                                                                       | `FileComparison.content`                                                                         |
+| `busca::get_percent_matching_lines`                                                                     | `busca::get_similarity_ratio`                                                                    |
+| `busca::format_file_matches`                                                                            | `busca::format_file_comparisons`                                                                 |
+| `busca_py.search_for_lines(...)`                                                                        | `busca_py.search(...)`                                                                           |
+| `--max-lines` (CLI)                                                                                     | `--max-file-lines`                                                                               |
+| `Args.max_lines` (Rust), `max_lines` (Python kwarg)                                                     | `max_file_lines`                                                                                 |
+| `Args.include_patterns` / `exclude_patterns`                                                            | `Args.include_glob` / `exclude_glob`                                                             |
+| `include_globs` / `exclude_globs` (Python kwargs, plural)                                               | `include_glob` / `exclude_glob` (singular)                                                       |
+| `parse_glob_pattern` was `pub` and panicked on bad globs                                                | `pub(crate)` and returns `Result<Pattern, busca::Error>`; library callers go through `Args::new` |
+| `compare_files` was `pub` and took `ParallelIterator<Item = Result<walkdir::DirEntry, walkdir::Error>>` | removed; library callers use `run_search` or `run_search_with_progress`                          |
+| `Args { ... }` struct-literal construction outside the crate                                            | `Args::new(...)` only (`Args` is now `#[non_exhaustive]`)                                        |
+| `requires-python = ">=3.7"`                                                                             | `requires-python = ">=3.11"`                                                                     |
+| `Cargo.toml` had no `rust-version`                                                                      | `rust-version = "1.80"`                                                                          |
 
 - `Args.include_glob` and `Args.exclude_glob` were `pub Option<Vec<glob::Pattern>>`; they are now `pub(crate)`. Library callers go through `Args::new` with string globs.
 
