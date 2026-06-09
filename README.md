@@ -72,6 +72,16 @@ relevant_file_comparisons = busca.search(
 
 assert len(relevant_file_comparisons) < len(all_file_comparisons)
 
+# Perform a search that drops candidates below a similarity floor
+strong_file_comparisons = busca.search(
+    reference_string=reference_string,
+    search_path="./sample_dir_hello_world",
+    include_glob=["*.py"],
+    min_similarity_ratio=0.5,
+)
+
+assert all(fc.similarity_ratio >= 0.5 for fc in strong_file_comparisons)
+
 # Create a new FileComparison object
 new_file_comparison = busca.FileComparison("file/path", 1.0, "file\ncontent")
 ```
