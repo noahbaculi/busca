@@ -4,7 +4,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
-use similar::TextDiff;
+use similar::{DiffableStr, TextDiff};
+use std::collections::HashMap;
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
@@ -111,7 +112,8 @@ pub fn format_file_comparisons(file_comparisons: &[FileComparison]) -> String {
         grid.add(Cell::from(file_comparison.path.display().to_string()));
 
         // Add second column with the visual indicator of the similarity ratio
-        let visual_indicator = "+".repeat((file_comparison.similarity_ratio * 10.0).round() as usize);
+        let visual_indicator =
+            "+".repeat((file_comparison.similarity_ratio * 10.0).round() as usize);
         let vis_cell = Cell::from(visual_indicator);
         grid.add(vis_cell);
 
@@ -250,7 +252,10 @@ pub fn run_search(args: &Args) -> Result<Vec<FileComparison>, Error> {
     run_search_with_progress(args, |_, _| {})
 }
 
-pub fn run_search_with_progress<F>(args: &Args, on_progress: F) -> Result<Vec<FileComparison>, Error>
+pub fn run_search_with_progress<F>(
+    args: &Args,
+    on_progress: F,
+) -> Result<Vec<FileComparison>, Error>
 where
     F: Fn(u64, u64) + Send + Sync,
 {
@@ -450,6 +455,36 @@ pub fn get_similarity_ratio(reference_string: &str, candidate_content: &str) -> 
     diff.ratio()
 }
 
+/// Builds a line-count multiset using `similar`'s own line tokenizer, so the
+/// counts share the exact tokenization (and denominator) `TextDiff::from_lines`
+/// uses. Returns each distinct line's count and the total token count.
+#[allow(dead_code)] // wired into the bounded search path below
+fn line_counts(s: &str) -> (HashMap<&str, u32>, usize) {
+    let mut counts: HashMap<&str, u32> = HashMap::new();
+    let mut len = 0;
+    for token in s.tokenize_lines() {
+        *counts.entry(token).or_insert(0) += 1;
+        len += 1;
+    }
+    (counts, len)
+}
+
+/// The reference file's line multiset and token count, built once and shared
+/// across every candidate comparison.
+#[allow(dead_code)] // wired into the bounded search path below
+struct ReferenceIndex<'a> {
+    counts: HashMap<&'a str, u32>,
+    len: usize,
+}
+
+impl<'a> ReferenceIndex<'a> {
+    #[allow(dead_code)] // wired into the bounded search path below
+    fn new(reference: &'a str) -> Self {
+        let (counts, len) = line_counts(reference);
+        Self { counts, len }
+    }
+}
+
 #[cfg(test)]
 mod test_compare_file {
     use super::*;
@@ -479,8 +514,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison =
-            compare_file(dir_entry_result, &valid_args, &reference_string);
+        let file_comparison = compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(file_comparison, None);
     }
@@ -499,8 +533,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison =
-            compare_file(dir_entry_result, &valid_args, &reference_string);
+        let file_comparison = compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(
             file_comparison,
@@ -528,8 +561,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison =
-            compare_file(dir_entry_result, &valid_args, &reference_string);
+        let file_comparison = compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(
             file_comparison,
@@ -713,14 +745,7 @@ mod test_args_new {
     #[test]
     fn missing_search_path_errors() {
         let bogus = PathBuf::from("/definitely/not/a/real/path/xyz123");
-        let result = Args::new(
-            "ref".into(),
-            bogus.clone(),
-            None,
-            None,
-            vec![],
-            vec![],
-        );
+        let result = Args::new("ref".into(), bogus.clone(), None, None, vec![], vec![]);
         match result {
             Err(Error::SearchPathNotFound(p)) => assert_eq!(p, bogus),
             other => panic!("expected SearchPathNotFound, got {:?}", other),
@@ -744,5 +769,49 @@ mod test_read_file {
         let path = PathBuf::from("sample_dir_hello_world");
         let result = read_file(&path);
         assert_eq!(result, None);
+    }
+}
+
+#[cfg(test)]
+mod test_line_tokens {
+    use super::*;
+
+    #[test]
+    fn line_counts_match_textdiff_tokenization() {
+        // `from_lines(s, "").old_slices()` is exactly how `similar` tokenizes the
+        // old side, so `line_counts` must agree on count and on every token.
+        for s in [
+            "a\nb\nc\n",
+            "a\nb\nc",
+            "a\n\nb\n",
+            "single line no newline",
+            "trailing\n",
+            "carriage\r\nreturn\r\n",
+            "lone\rcarriage",
+        ] {
+            let (counts, len) = line_counts(s);
+            let expected: Vec<&str> = TextDiff::from_lines(s, "").old_slices().to_vec();
+            assert_eq!(len, expected.len(), "token count mismatch for {s:?}");
+            let total: u32 = counts.values().sum();
+            assert_eq!(
+                total as usize,
+                expected.len(),
+                "multiset total mismatch for {s:?}"
+            );
+            for token in &expected {
+                assert!(
+                    counts.contains_key(token),
+                    "missing token {token:?} for {s:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn line_counts_multiset_is_correct() {
+        let (counts, len) = line_counts("a\na\nb\n");
+        assert_eq!(len, 3);
+        assert_eq!(counts.get("a\n"), Some(&2));
+        assert_eq!(counts.get("b\n"), Some(&1));
     }
 }
