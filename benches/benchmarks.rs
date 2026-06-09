@@ -75,10 +75,12 @@ fn bench_run_search(c: &mut Criterion) {
 
 /// Benchmarks the directory walk in isolation: the single-threaded `WalkDir`
 /// traversal that `run_search_with_progress` runs to completion before any
-/// parallel scoring begins. Read against the `run_search` variants, its median
-/// gives the walk's share of total search time. That share is the measurement
-/// audit finding B4 (parallel walk) needs before any walk work starts. Uses the
-/// same Django fixture and skip-if-absent guard as `bench_run_search`.
+/// parallel scoring begins. Read against the `run_search` variants from the same
+/// run, its median gives the walk's share of total search time. That share came
+/// out near 2% on the Django tree, so audit finding B4 (parallel walk) was
+/// deferred; see ADR-0003. The benchmark stays so the share can be re-checked if
+/// a future workload shifts it. Uses the same Django fixture and skip-if-absent
+/// guard as `bench_run_search`.
 fn bench_walk(c: &mut Criterion) {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let search_path = manifest.join("sample-comprehensive/django");

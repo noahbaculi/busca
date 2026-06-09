@@ -261,6 +261,10 @@ where
 {
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    // The walk is single-threaded and fully collected before the parallel
+    // scoring below. It is about 2% of total search time on the Django tree, so a
+    // parallel walker (audit finding B4) was deferred. See ADR-0003 and the
+    // `walk` benchmark in benches/benchmarks.rs.
     let dir_entries = WalkDir::new(&args.search_path)
         .into_iter()
         .collect::<Vec<_>>();
