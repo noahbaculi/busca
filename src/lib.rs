@@ -362,11 +362,9 @@ mod test_run_search {
     }
 }
 
-pub(crate) fn compare_file(
-    dir_entry: DirEntry,
-    args: &Args,
-    reference_string: &str,
-) -> Option<FileComparison> {
+/// Applies the file-type and glob filters and reads the candidate's content.
+/// Returns `None` when the entry is filtered out or cannot be read as UTF-8.
+fn read_candidate(dir_entry: DirEntry, args: &Args) -> Option<(PathBuf, String)> {
     // file_type() comes from the directory read at no extra syscall, where
     // is_file() would re-stat every candidate. A symlink reports as neither file
     // nor directory, so follow it with is_file() to match the old behavior.
@@ -378,29 +376,34 @@ pub(crate) fn compare_file(
 
     let candidate_path = dir_entry.into_path();
 
-    // Skip paths that do not match any include glob
     if let Some(include_glob) = &args.include_glob {
         let matches_any_include = include_glob
             .iter()
             .any(|glob| glob.matches_path(candidate_path.as_path()));
-
         if !matches_any_include {
             return None;
         }
-    };
+    }
 
-    // Skip paths that match any exclude glob
     if let Some(exclude_glob) = &args.exclude_glob {
         let matches_any_exclude = exclude_glob
             .iter()
             .any(|glob| glob.matches_path(candidate_path.as_path()));
-
         if matches_any_exclude {
             return None;
         }
-    };
+    }
 
     let candidate_content = read_file(&candidate_path)?;
+    Some((candidate_path, candidate_content))
+}
+
+pub(crate) fn compare_file(
+    dir_entry: DirEntry,
+    args: &Args,
+    reference_string: &str,
+) -> Option<FileComparison> {
+    let (candidate_path, candidate_content) = read_candidate(dir_entry, args)?;
 
     if let Some(max_file_lines) = args.max_file_lines {
         let num_candidate_lines = candidate_content.lines().count();
