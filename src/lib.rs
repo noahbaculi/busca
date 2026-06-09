@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use similar::{DiffableStr, TextDiff};
-use std::collections::HashMap;
+use std::collections::{BinaryHeap, HashMap};
 use std::fs::{self};
 use std::path::{Path, PathBuf};
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
@@ -525,6 +525,111 @@ fn quick_ratio_bound(
     2.0 * matches as f32 / total as f32
 }
 
+/// One result inside a `TopN` heap. Ordered so the "greatest" entry is the one
+/// to evict first: lowest ratio, and for ties the highest walk index.
+#[allow(dead_code)] // wired into the bounded search path below
+struct HeapEntry {
+    walk_index: usize,
+    comparison: FileComparison,
+}
+
+impl PartialEq for HeapEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.walk_index == other.walk_index
+            && self.comparison.similarity_ratio == other.comparison.similarity_ratio
+    }
+}
+impl Eq for HeapEntry {}
+
+impl PartialOrd for HeapEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for HeapEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Greater means more evictable: lower ratio first, then higher index.
+        other
+            .comparison
+            .similarity_ratio
+            .partial_cmp(&self.comparison.similarity_ratio)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(self.walk_index.cmp(&other.walk_index))
+    }
+}
+
+/// A bounded collector that retains at most `capacity` highest-ratio results.
+/// Backed by a max-heap whose top is the next entry to evict.
+#[allow(dead_code)] // wired into the bounded search path below
+struct TopN {
+    capacity: usize,
+    heap: BinaryHeap<HeapEntry>,
+}
+
+#[allow(dead_code)] // wired into the bounded search path below
+impl TopN {
+    fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            heap: BinaryHeap::new(),
+        }
+    }
+
+    /// Whether a candidate with this upper bound could still place. Computing the
+    /// full diff is only worthwhile when the heap is not yet full, or the bound
+    /// is at least the lowest kept ratio. Equality computes, so ties at the
+    /// threshold are resolved by the true ratio and walk index, not pruned.
+    fn should_compute(&self, upper_bound: f32) -> bool {
+        if self.capacity == 0 {
+            return false;
+        }
+        if self.heap.len() < self.capacity {
+            return true;
+        }
+        match self.heap.peek() {
+            Some(worst) => upper_bound >= worst.comparison.similarity_ratio,
+            None => true,
+        }
+    }
+
+    fn push(&mut self, walk_index: usize, comparison: FileComparison) {
+        self.push_entry(HeapEntry {
+            walk_index,
+            comparison,
+        });
+    }
+
+    fn push_entry(&mut self, entry: HeapEntry) {
+        if self.capacity == 0 {
+            return;
+        }
+        self.heap.push(entry);
+        if self.heap.len() > self.capacity {
+            self.heap.pop();
+        }
+    }
+
+    fn merge(mut self, other: TopN) -> TopN {
+        for entry in other.heap {
+            self.push_entry(entry);
+        }
+        self
+    }
+
+    fn into_sorted_vec(self) -> Vec<FileComparison> {
+        let mut entries = self.heap.into_vec();
+        entries.sort_by(|a, b| {
+            b.comparison
+                .similarity_ratio
+                .partial_cmp(&a.comparison.similarity_ratio)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.walk_index.cmp(&b.walk_index))
+        });
+        entries.into_iter().map(|e| e.comparison).collect()
+    }
+}
+
 #[cfg(test)]
 mod test_compare_file {
     use super::*;
@@ -903,5 +1008,89 @@ mod test_upper_bounds {
     fn empty_inputs_bound_is_one() {
         assert_eq!(real_quick_ratio(0, 0), 1.0);
         assert_eq!(quick_ratio("", ""), 1.0);
+    }
+}
+
+#[cfg(test)]
+mod test_topn {
+    use super::*;
+
+    fn fc(path: &str, ratio: f32) -> FileComparison {
+        FileComparison {
+            path: PathBuf::from(path),
+            similarity_ratio: ratio,
+            content: String::new(),
+        }
+    }
+
+    #[test]
+    fn keeps_highest_ratios_sorted_descending() {
+        let mut top = TopN::new(2);
+        top.push(0, fc("a", 0.1));
+        top.push(1, fc("b", 0.9));
+        top.push(2, fc("c", 0.5));
+        let out = top.into_sorted_vec();
+        assert_eq!(
+            out.iter()
+                .map(|c| c.path.to_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["b", "c"]
+        );
+    }
+
+    #[test]
+    fn ties_break_by_walk_index_ascending() {
+        let mut top = TopN::new(2);
+        // Equal ratios; lower walk index must win and sort first.
+        top.push(5, fc("late", 0.5));
+        top.push(1, fc("early", 0.5));
+        top.push(9, fc("latest", 0.5));
+        let out = top.into_sorted_vec();
+        assert_eq!(
+            out.iter()
+                .map(|c| c.path.to_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["early", "late"]
+        );
+    }
+
+    #[test]
+    fn should_compute_is_false_only_when_full_and_below_threshold() {
+        let mut top = TopN::new(2);
+        assert!(top.should_compute(0.0), "not full: always compute");
+        top.push(0, fc("a", 0.4));
+        top.push(1, fc("b", 0.6));
+        // Full; threshold is the lowest kept ratio, 0.4.
+        assert!(!top.should_compute(0.3), "below threshold: prune");
+        assert!(
+            top.should_compute(0.4),
+            "equal to threshold: compute (tie safety)"
+        );
+        assert!(top.should_compute(0.5), "above threshold: compute");
+    }
+
+    #[test]
+    fn capacity_zero_never_computes_and_is_empty() {
+        let mut top = TopN::new(0);
+        assert!(!top.should_compute(1.0));
+        top.push(0, fc("a", 1.0));
+        assert!(top.into_sorted_vec().is_empty());
+    }
+
+    #[test]
+    fn merge_keeps_global_top_n() {
+        let mut a = TopN::new(2);
+        a.push(0, fc("a", 0.9));
+        a.push(1, fc("b", 0.2));
+        let mut b = TopN::new(2);
+        b.push(2, fc("c", 0.7));
+        b.push(3, fc("d", 0.1));
+        let out = a.merge(b).into_sorted_vec();
+        assert_eq!(
+            out.iter()
+                .map(|c| c.path.to_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["a", "c"]
+        );
     }
 }
