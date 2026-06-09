@@ -566,6 +566,74 @@ mod test_run_search {
         }
         reference.truncate(0);
     }
+
+    /// Creates a unique temp directory and removes it on drop, so a test can lay
+    /// out its own candidate files without an on-disk fixture or an extra
+    /// dependency.
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new(tag: &str) -> Self {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path =
+                std::env::temp_dir().join(format!("busca_{tag}_{}_{nanos}", std::process::id()));
+            fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn bounded_resolves_ties_straddling_the_heap_floor() {
+        // The on-disk fixture has only distinct ratios, so its heap floor is
+        // never a tie and the walk-index tiebreak at the floor goes untested.
+        // Here a dozen identical-content files all score 0.5, so when `count`
+        // lands inside that group the heap is full and its worst-kept ratio is
+        // itself a tie. Whichever files the bounded path keeps must match the
+        // stable-sorted, truncated unbounded ranking. Both paths consume the same
+        // walk, so the assertion holds for whatever order readdir returns.
+        let dir = TempDir::new("ties");
+
+        fs::write(dir.path.join("aaa_exact.txt"), "a\nb\nc\nd\n").unwrap();
+        for i in 0..12 {
+            fs::write(dir.path.join(format!("tie_{i:02}.txt")), "a\nb\nx\ny\n").unwrap();
+        }
+        fs::write(dir.path.join("zzz_low.txt"), "p\nq\n").unwrap();
+
+        let args = |count| Args {
+            reference_string: "a\nb\nc\nd\n".to_string(),
+            search_path: dir.path.clone(),
+            max_file_lines: Some(5000),
+            include_glob: None,
+            exclude_glob: None,
+            count,
+            min_similarity_ratio: None,
+        };
+
+        let reference = run_search(&args(None)).unwrap();
+        assert_eq!(
+            reference.len(),
+            14,
+            "fixture should yield 14 scoreable files"
+        );
+        // Counts 2 through 13 fall inside the 0.5 tie group; 14 and 100 keep all.
+        for n in [1usize, 2, 7, 13, 14, 100] {
+            let mut expected = reference.clone();
+            expected.truncate(n);
+            let bounded = run_search(&args(Some(n))).unwrap();
+            assert_eq!(bounded, expected, "tie mismatch at count {n}");
+        }
+    }
 }
 
 /// Applies the file-type and glob filters and reads the candidate's content.
