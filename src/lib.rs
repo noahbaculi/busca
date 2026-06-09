@@ -2,7 +2,7 @@
 use glob::Pattern;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use rayon::iter::ParallelIterator;
+use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::prelude::IntoParallelIterator;
 use similar::{DiffableStr, TextDiff};
 use std::collections::{BinaryHeap, HashMap};
@@ -267,30 +267,97 @@ where
     let total = dir_entries.len() as u64;
     let done = AtomicU64::new(0);
 
-    let mut file_comparisons: Vec<FileComparison> = dir_entries
-        .into_par_iter()
-        .filter_map(|dir_entry_result| {
-            let out = match dir_entry_result {
-                Ok(dir_entry) => compare_file(dir_entry, args, &args.reference_string),
-                Err(_) => None,
-            };
-            let d = done.fetch_add(1, Ordering::Relaxed) + 1;
-            on_progress(d, total);
-            out
-        })
-        .collect();
+    match args.count {
+        None => {
+            let mut file_comparisons: Vec<FileComparison> = dir_entries
+                .into_par_iter()
+                .filter_map(|dir_entry_result| {
+                    let out = match dir_entry_result {
+                        Ok(dir_entry) => compare_file(dir_entry, args, &args.reference_string),
+                        Err(_) => None,
+                    };
+                    let d = done.fetch_add(1, Ordering::Relaxed) + 1;
+                    on_progress(d, total);
+                    out
+                })
+                .collect();
 
-    file_comparisons.sort_by(|a, b| {
-        b.similarity_ratio
-            .partial_cmp(&a.similarity_ratio)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+            file_comparisons.sort_by(|a, b| {
+                b.similarity_ratio
+                    .partial_cmp(&a.similarity_ratio)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
-    if let Some(count) = args.count {
-        file_comparisons.truncate(count);
+            Ok(file_comparisons)
+        }
+        Some(count) => {
+            let reference_index = ReferenceIndex::new(&args.reference_string);
+            let collected = dir_entries
+                .into_par_iter()
+                .enumerate()
+                .fold(
+                    || TopN::new(count),
+                    |mut heap, (walk_index, dir_entry_result)| {
+                        if let Ok(dir_entry) = dir_entry_result {
+                            if let Some(comparison) =
+                                score_candidate_bounded(dir_entry, args, &reference_index, &heap)
+                            {
+                                heap.push(walk_index, comparison);
+                            }
+                        }
+                        let d = done.fetch_add(1, Ordering::Relaxed) + 1;
+                        on_progress(d, total);
+                        heap
+                    },
+                )
+                .reduce(|| TopN::new(count), TopN::merge);
+
+            Ok(collected.into_sorted_vec())
+        }
+    }
+}
+
+/// Scores one candidate for the bounded search. Skips the full `TextDiff::ratio`
+/// whenever a cheap upper bound proves the file cannot enter the current top-N.
+fn score_candidate_bounded(
+    dir_entry: DirEntry,
+    args: &Args,
+    reference: &ReferenceIndex,
+    heap: &TopN,
+) -> Option<FileComparison> {
+    let (candidate_path, candidate_content) = read_candidate(dir_entry, args)?;
+
+    // max_file_lines uses str::lines().count(), identical to the unbounded path,
+    // so behavior is preserved even for files with lone carriage returns (where
+    // similar's tokenize_lines would count differently). This is why the double
+    // line scan is not merged away here: the two counts use deliberately
+    // different tokenizers.
+    if let Some(max_file_lines) = args.max_file_lines {
+        let num_candidate_lines = candidate_content.lines().count();
+        if (num_candidate_lines > max_file_lines) | (num_candidate_lines == 0) {
+            return None;
+        }
     }
 
-    Ok(file_comparisons)
+    // The multiset and token count for the upper bounds use similar's tokenizer.
+    let (cand_counts, cand_len) = line_counts(&candidate_content);
+
+    if !heap.should_compute(real_quick_ratio(reference.len, cand_len)) {
+        return None;
+    }
+
+    let quick = quick_ratio_bound(&reference.counts, reference.len, &cand_counts, cand_len);
+    if !heap.should_compute(quick) {
+        return None;
+    }
+
+    let similarity_ratio = get_similarity_ratio(&args.reference_string, &candidate_content);
+
+    Some(FileComparison {
+        path: candidate_path,
+        similarity_ratio,
+        content: candidate_content,
+    })
 }
 #[cfg(test)]
 mod test_run_search {
@@ -359,6 +426,52 @@ mod test_run_search {
             },
         ];
         assert_eq!(run_search(&valid_args).unwrap(), expected);
+    }
+
+    fn args_with_count(count: Option<usize>) -> Args {
+        Args {
+            reference_string: fs::read_to_string("sample_dir_hello_world/nested_dir/ref_B.py")
+                .unwrap(),
+            search_path: PathBuf::from("sample_dir_hello_world"),
+            max_file_lines: Some(5000),
+            include_glob: None,
+            exclude_glob: None,
+            count,
+        }
+    }
+
+    #[test]
+    fn bounded_matches_unbounded_then_truncate() {
+        // The unbounded path is the reference implementation: compute every
+        // candidate, stable-sort, then truncate. The bounded path must return a
+        // byte-identical prefix for every count, including ties and 0.0 fills.
+        let mut reference = run_search(&args_with_count(None)).unwrap();
+        for n in [0usize, 1, 2, 3, 100] {
+            let mut expected = reference.clone();
+            expected.truncate(n);
+            let bounded = run_search(&args_with_count(Some(n))).unwrap();
+            assert_eq!(bounded, expected, "mismatch at count {n}");
+        }
+        // Guard against accidental mutation of `reference` above.
+        reference.truncate(0);
+        assert!(reference.is_empty());
+    }
+
+    #[test]
+    fn bounded_matches_unbounded_with_globs() {
+        let with_globs = |count| Args {
+            include_glob: Some(vec![Pattern::new("*.py").unwrap()]),
+            exclude_glob: Some(vec![Pattern::new("*.json").unwrap()]),
+            ..args_with_count(count)
+        };
+        let mut reference = run_search(&with_globs(None)).unwrap();
+        for n in [1usize, 2, 50] {
+            let mut expected = reference.clone();
+            expected.truncate(n);
+            let bounded = run_search(&with_globs(Some(n))).unwrap();
+            assert_eq!(bounded, expected, "glob mismatch at count {n}");
+        }
+        reference.truncate(0);
     }
 }
 
@@ -461,7 +574,6 @@ pub fn get_similarity_ratio(reference_string: &str, candidate_content: &str) -> 
 /// Builds a line-count multiset using `similar`'s own line tokenizer, so the
 /// counts share the exact tokenization (and denominator) `TextDiff::from_lines`
 /// uses. Returns each distinct line's count and the total token count.
-#[allow(dead_code)] // wired into the bounded search path below
 fn line_counts(s: &str) -> (HashMap<&str, u32>, usize) {
     let mut counts: HashMap<&str, u32> = HashMap::new();
     let mut len = 0;
@@ -474,14 +586,12 @@ fn line_counts(s: &str) -> (HashMap<&str, u32>, usize) {
 
 /// The reference file's line multiset and token count, built once and shared
 /// across every candidate comparison.
-#[allow(dead_code)] // wired into the bounded search path below
 struct ReferenceIndex<'a> {
     counts: HashMap<&'a str, u32>,
     len: usize,
 }
 
 impl<'a> ReferenceIndex<'a> {
-    #[allow(dead_code)] // wired into the bounded search path below
     fn new(reference: &'a str) -> Self {
         let (counts, len) = line_counts(reference);
         Self { counts, len }
@@ -490,7 +600,6 @@ impl<'a> ReferenceIndex<'a> {
 
 /// Length-only upper bound on `similar`'s ratio: matches cannot exceed the
 /// shorter token sequence. Nearly free, used as a pre-filter.
-#[allow(dead_code)] // wired into the bounded search path below
 fn real_quick_ratio(ref_len: usize, cand_len: usize) -> f32 {
     let total = ref_len + cand_len;
     if total == 0 {
@@ -502,7 +611,6 @@ fn real_quick_ratio(ref_len: usize, cand_len: usize) -> f32 {
 /// Line-multiset upper bound on `similar`'s ratio: matches cannot exceed the
 /// multiset intersection of the two line sequences. Tighter than
 /// `real_quick_ratio` and always less than or equal to it.
-#[allow(dead_code)] // wired into the bounded search path below
 fn quick_ratio_bound(
     ref_counts: &HashMap<&str, u32>,
     ref_len: usize,
@@ -530,7 +638,6 @@ fn quick_ratio_bound(
 
 /// One result inside a `TopN` heap. Ordered so the "greatest" entry is the one
 /// to evict first: lowest ratio, and for ties the highest walk index.
-#[allow(dead_code)] // wired into the bounded search path below
 struct HeapEntry {
     walk_index: usize,
     comparison: FileComparison,
@@ -564,13 +671,11 @@ impl Ord for HeapEntry {
 
 /// A bounded collector that retains at most `capacity` highest-ratio results.
 /// Backed by a max-heap whose top is the next entry to evict.
-#[allow(dead_code)] // wired into the bounded search path below
 struct TopN {
     capacity: usize,
     heap: BinaryHeap<HeapEntry>,
 }
 
-#[allow(dead_code)] // wired into the bounded search path below
 impl TopN {
     fn new(capacity: usize) -> Self {
         Self {
