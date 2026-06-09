@@ -16,10 +16,10 @@ enum OutputFormat {
     Json,
 }
 
-/// Print an error message to stderr and exit with status code 1.
+/// Print an error message to stderr and exit with status code 2.
 fn graceful_panic(error_str: &str) -> ! {
     eprintln!("{}", error_str);
-    std::process::exit(1);
+    std::process::exit(2);
 }
 
 fn parse_similarity_ratio(s: &str) -> Result<f32, String> {
@@ -53,8 +53,8 @@ fn main() {
     };
 
     if file_comparisons.is_empty() {
-        println!("No files found that match the criteria.");
-        std::process::exit(0);
+        eprintln!("No files found that match the criteria.");
+        std::process::exit(1);
     }
 
     match output_format {

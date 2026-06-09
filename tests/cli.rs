@@ -143,3 +143,62 @@ fn auto_fallback_note_goes_to_stderr_not_stdout() {
         "auto fallback explains itself on stderr"
     );
 }
+
+#[test]
+fn exit_zero_when_results_found() {
+    let status = busca()
+        .args([
+            "-r",
+            "sample_dir_hello_world/file_1.py",
+            "-s",
+            "sample_dir_hello_world",
+            "--include-glob",
+            "*.py",
+            "--format",
+            "json",
+        ])
+        .status()
+        .expect("run busca");
+    assert_eq!(status.code(), Some(0));
+}
+
+#[test]
+fn exit_one_when_no_results() {
+    // No candidate matches this glob, so the result set is empty.
+    let output = busca()
+        .args([
+            "-r",
+            "sample_dir_hello_world/file_1.py",
+            "-s",
+            "sample_dir_hello_world",
+            "--include-glob",
+            "*.no_such_ext",
+        ])
+        .output()
+        .expect("run busca");
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        output.stdout.is_empty(),
+        "stdout must be clean on empty: {:?}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8(output.stderr).expect("utf-8 stderr");
+    assert!(stderr.contains("No files found"), "stderr: {stderr}");
+}
+
+#[test]
+fn exit_two_on_error() {
+    // A missing search path is an error, distinct from an empty result.
+    let status = busca()
+        .args([
+            "-r",
+            "sample_dir_hello_world/file_1.py",
+            "-s",
+            "this_path_does_not_exist_xyz",
+            "--format",
+            "json",
+        ])
+        .status()
+        .expect("run busca");
+    assert_eq!(status.code(), Some(2));
+}
