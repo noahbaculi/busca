@@ -1,13 +1,14 @@
+#![warn(clippy::perf, clippy::complexity)]
 use glob::Pattern;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use similar::TextDiff;
 use std::fs::{self};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 use std::fmt;
 
@@ -265,10 +266,10 @@ where
         .into_par_iter()
         .filter_map(|dir_entry_result| {
             let out = match dir_entry_result {
-                Ok(dir_entry) => compare_file(dir_entry.into_path(), args, &args.reference_string),
+                Ok(dir_entry) => compare_file(dir_entry, args, &args.reference_string),
                 Err(_) => None,
             };
-            let d = done.fetch_add(1, Ordering::SeqCst) + 1;
+            let d = done.fetch_add(1, Ordering::Relaxed) + 1;
             on_progress(d, total);
             out
         })
@@ -357,19 +358,25 @@ mod test_run_search {
 }
 
 pub(crate) fn compare_file(
-    candidate_path: PathBuf,
+    dir_entry: DirEntry,
     args: &Args,
     reference_string: &str,
 ) -> Option<FileComparison> {
-    // Skip paths that are not files
-    if !candidate_path.is_file() {
+    // file_type() comes from the directory read at no extra syscall, where
+    // is_file() would re-stat every candidate. A symlink reports as neither file
+    // nor directory, so follow it with is_file() to match the old behavior.
+    let file_type = dir_entry.file_type();
+    let is_file = file_type.is_file() || (file_type.is_symlink() && dir_entry.path().is_file());
+    if !is_file {
         return None;
     }
+
+    let candidate_path = dir_entry.into_path();
 
     // Skip paths that do not match any include glob
     if let Some(include_glob) = &args.include_glob {
         let matches_any_include = include_glob
-            .par_iter()
+            .iter()
             .any(|glob| glob.matches_path(candidate_path.as_path()));
 
         if !matches_any_include {
@@ -380,7 +387,7 @@ pub(crate) fn compare_file(
     // Skip paths that match any exclude glob
     if let Some(exclude_glob) = &args.exclude_glob {
         let matches_any_exclude = exclude_glob
-            .par_iter()
+            .iter()
             .any(|glob| glob.matches_path(candidate_path.as_path()));
 
         if matches_any_exclude {
@@ -388,7 +395,7 @@ pub(crate) fn compare_file(
         }
     };
 
-    let candidate_content = read_file(candidate_path.clone())?;
+    let candidate_content = read_file(&candidate_path)?;
 
     if let Some(max_file_lines) = args.max_file_lines {
         let num_candidate_lines = candidate_content.lines().count();
@@ -406,8 +413,8 @@ pub(crate) fn compare_file(
     })
 }
 
-fn read_file(candidate_path: PathBuf) -> Option<String> {
-    match fs::read_to_string(&candidate_path) {
+fn read_file(candidate_path: &Path) -> Option<String> {
+    match fs::read_to_string(candidate_path) {
         Ok(content) => Some(content),
         Err(error) if error.kind() == std::io::ErrorKind::InvalidData => None,
         Err(error) => {
@@ -473,7 +480,7 @@ mod test_compare_file {
             .unwrap();
 
         let file_comparison =
-            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
+            compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(file_comparison, None);
     }
@@ -493,7 +500,7 @@ mod test_compare_file {
             .unwrap();
 
         let file_comparison =
-            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
+            compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(
             file_comparison,
@@ -522,7 +529,7 @@ mod test_compare_file {
             .unwrap();
 
         let file_comparison =
-            compare_file(dir_entry_result.into_path(), &valid_args, &reference_string);
+            compare_file(dir_entry_result, &valid_args, &reference_string);
 
         assert_eq!(
             file_comparison,
@@ -547,7 +554,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result, &valid_args, "");
 
         assert_eq!(
             file_comparison,
@@ -572,7 +579,7 @@ mod test_compare_file {
             .unwrap()
             .unwrap();
 
-        let file_comparison = compare_file(dir_entry_result.into_path(), &valid_args, "");
+        let file_comparison = compare_file(dir_entry_result, &valid_args, "");
 
         assert_eq!(file_comparison, None);
     }
@@ -728,14 +735,14 @@ mod test_read_file {
     #[test]
     fn returns_none_on_invalid_data() {
         let path = PathBuf::from("sample_dir_hello_world/nested_dir/sample_json.json");
-        let result = read_file(path);
+        let result = read_file(&path);
         assert!(result.is_some(), "json file should read as UTF-8");
     }
 
     #[test]
     fn returns_none_on_directory_read_without_panicking() {
         let path = PathBuf::from("sample_dir_hello_world");
-        let result = read_file(path);
+        let result = read_file(&path);
         assert_eq!(result, None);
     }
 }
