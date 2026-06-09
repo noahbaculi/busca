@@ -148,7 +148,7 @@ impl InputArgs {
             reference_string,
             search_path,
             Some(self.max_file_lines),
-            None, // count is applied in main after filtering
+            Some(self.count),
             self.include_glob.unwrap_or_default(),
             self.exclude_glob.unwrap_or_default(),
         )
@@ -192,7 +192,7 @@ mod test_input_args_validation {
                 valid_args.reference_string.clone(),
                 valid_args.search_path.clone(),
                 valid_args.max_file_lines,
-                None,
+                valid_args.count,
                 vec!["*.py".into()],
                 vec!["*.yml".into()],
             )
@@ -218,7 +218,7 @@ mod test_input_args_validation {
                 valid_args.reference_string.clone(),
                 env::current_dir().unwrap(),
                 valid_args.max_file_lines,
-                None,
+                valid_args.count,
                 vec![],
                 vec![],
             )
