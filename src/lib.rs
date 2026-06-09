@@ -162,6 +162,7 @@ mod busca_py {
         search_path,
         max_file_lines=None,
         count=None,
+        min_similarity_ratio=None,
         include_glob=None,
         exclude_glob=None
     ))]
@@ -170,6 +171,7 @@ mod busca_py {
         search_path: PathBuf,
         max_file_lines: Option<usize>,
         count: Option<usize>,
+        min_similarity_ratio: Option<f32>,
         include_glob: Option<Bound<'_, PyAny>>,
         exclude_glob: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Vec<FileComparison>> {
@@ -181,7 +183,7 @@ mod busca_py {
             search_path,
             max_file_lines,
             count,
-            None,
+            min_similarity_ratio,
             include_glob,
             exclude_glob,
         )

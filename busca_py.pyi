@@ -33,9 +33,11 @@ def search(
     search_path: StrPath,
     max_file_lines: Optional[int] = None,
     count: Optional[int] = None,
+    min_similarity_ratio: Optional[float] = None,
     include_glob: Optional[Union[str, list[str]]] = None,
     exclude_glob: Optional[Union[str, list[str]]] = None,
 ) -> list[FileComparison]:
     """Walk `search_path` and return a `FileComparison` for each candidate that
-    survives the include/exclude globs and `max_file_lines` filter, ranked by
+    survives the include/exclude globs and `max_file_lines` filter and whose
+    `similarity_ratio` is at least `min_similarity_ratio` (when set), ranked by
     descending `similarity_ratio`."""

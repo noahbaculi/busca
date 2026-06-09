@@ -109,6 +109,27 @@ class TestSearchResults(unittest.TestCase):
         for fc in result:
             self.assertFalse(str(fc.path).endswith(".json"))
 
+    def test_min_similarity_ratio_filters(self):
+        with open("./sample_dir_hello_world/file_1.py", "r") as file:
+            ref_str = file.read()
+        results = busca.search(
+            reference_string=ref_str,
+            search_path="./sample_dir_hello_world",
+            include_glob="*.py",
+            min_similarity_ratio=0.99,
+        )
+        self.assertTrue(len(results) >= 1)
+        for fc in results:
+            self.assertGreaterEqual(fc.similarity_ratio, 0.99)
+
+    def test_invalid_min_similarity_ratio_raises(self):
+        with self.assertRaises(ValueError):
+            busca.search(
+                reference_string="x",
+                search_path="./sample_dir_hello_world",
+                min_similarity_ratio=1.5,
+            )
+
     def test_glob_type_error_message_includes_inner_detail(self):
         with self.assertRaises(ValueError) as ctx:
             busca.search(
