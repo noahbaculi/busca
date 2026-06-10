@@ -164,7 +164,7 @@ busca --ref-file-path path_to_reference.json --search-path path_to_search_dir
 busca --ref-file-path path_to_reference.json
 ```
 
-##### Narrow search to only consider `.json` files whose paths match the glob `**/*foo*` and that contain fewer than 1,000 lines
+##### Narrow search to files under 1,000 lines that are either `.json` files or match the glob `**/*foo*`
 
 ```shell
 busca --ref-file-path path_to_reference.json --include-glob '*.json' --include-glob '**/*foo*' --max-file-lines 1000
