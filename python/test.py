@@ -11,79 +11,143 @@ def example_usage():
     with open(reference_file_path, "r") as file:
         reference_string = file.read()
 
-    # Perform search with required parameters
-    all_file_matches: list[busca.FileMatch] = busca.search_for_lines(
+    # Perform a search with required parameters
+    all_file_comparisons: list[busca.FileComparison] = busca.search(
         reference_string=reference_string,
         search_path="./sample_dir_hello_world",
     )
 
-    # File matches are returned in descending order of percent match
-    closest_file_match: busca.FileMatch = all_file_matches[0]
-    assert closest_file_match.path == Path(reference_file_path)
-    assert closest_file_match.percent_match == 1.0
-    assert closest_file_match.lines == reference_string
+    # Comparisons are returned in descending order of similarity_ratio
+    closest_file_comparison: busca.FileComparison = all_file_comparisons[0]
+    assert closest_file_comparison.path == Path(reference_file_path)
+    assert closest_file_comparison.similarity_ratio == 1.0
+    assert closest_file_comparison.content == reference_string
 
-    # Perform search for top 5 matches with additional filters
+    # Perform a search for the top 5 comparisons with additional filters
     # to speed up runtime by skipping files that will not match
-    relevant_file_matches: list[busca.FileMatch] = busca.search_for_lines(
+    relevant_file_comparisons: list[busca.FileComparison] = busca.search(
         reference_string=reference_string,
         search_path="./sample_dir_hello_world",
-        max_lines=10_000,
-        include_globs=["*.py"],
+        max_file_lines=10_000,
+        include_glob=["*.py"],
         count=5,
     )
 
-    assert len(relevant_file_matches) < len(all_file_matches)
+    assert len(relevant_file_comparisons) < len(all_file_comparisons)
 
-    # Create new file match object
-    new_file_match = busca.FileMatch("file/path", 1.0, "file\ncontent")
+    # Create a new FileComparison object
+    new_file_comparison = busca.FileComparison("file/path", 1.0, "file\ncontent")
+
+
+class TestExampleUsage(unittest.TestCase):
+    def test_example_usage_runs(self):
+        example_usage()
 
 
 class TestSignatures(unittest.TestCase):
     def test_module_contains_functions(self):
-        expected_functions = {"search_for_lines"}
+        expected_functions = {"search"}
         module_attributes = set(dir(busca))
         self.assertTrue(expected_functions.issubset(module_attributes))
 
     def test_non_empty_search_function_signature(self):
-        self.assertTrue(inspect.signature(busca.search_for_lines).parameters.items())
+        self.assertTrue(inspect.signature(busca.search).parameters.items())
 
-    def test_non_empty_file_match_class_signature(self):
-        self.assertTrue(inspect.signature(busca.FileMatch).parameters.items())
+    def test_non_empty_file_comparison_class_signature(self):
+        self.assertTrue(inspect.signature(busca.FileComparison).parameters.items())
 
 
 class TestSearchResults(unittest.TestCase):
     def setUp(self):
         with open("./sample_dir_hello_world/file_1.py", "r") as file:
             ref_str = file.read()
-        self.search = busca.search_for_lines(
+        self.search = busca.search(
             reference_string=ref_str,
             search_path="./",
-            max_lines=10000,
+            max_file_lines=10000,
             count=5,
-            include_globs=["*.py"],
+            include_glob=["*.py"],
         )
 
     def test_first_result(self):
-        file_match = self.search[0]
+        file_comparison = self.search[0]
 
-        expected_lines = 'print("Hello World 1")\nprint("Hello World 2")\n\n\nprint("Hello World 3")\nprint("Hello World 4")\n\nprint("Hello World 5")\nprint("Hello World 6")'
+        expected_content = 'print("Hello World 1")\nprint("Hello World 2")\n\n\nprint("Hello World 3")\nprint("Hello World 4")\n\nprint("Hello World 5")\nprint("Hello World 6")'
 
-        self.assertEqual(file_match.path, Path("./sample_dir_hello_world/file_1.py"))
-        self.assertEqual(file_match.percent_match, 1.0)
-        self.assertEqual(file_match.lines, expected_lines)
+        self.assertEqual(file_comparison.path, Path("./sample_dir_hello_world/file_1.py"))
+        self.assertEqual(file_comparison.similarity_ratio, 1.0)
+        self.assertEqual(file_comparison.content, expected_content)
 
     def test_third_result(self):
-        file_match = self.search[2]
+        file_comparison = self.search[2]
 
-        expected_lines = '\n\nprint("Hello World 1")\n\nprint("Hello World 3")\n'
+        expected_content = '\n\nprint("Hello World 1")\n\nprint("Hello World 3")\n'
 
         self.assertEqual(
-            file_match.path,
+            file_comparison.path,
             Path("./sample_dir_hello_world/nested_dir/sample_python_file_3.py"),
         )
-        self.assertEqual(file_match.percent_match, 0.4285714328289032)
-        self.assertEqual(file_match.lines, expected_lines)
+        self.assertEqual(file_comparison.similarity_ratio, 0.4285714328289032)
+        self.assertEqual(file_comparison.content, expected_content)
+
+    def test_single_string_include_glob(self):
+        with open("./sample_dir_hello_world/file_1.py", "r") as file:
+            ref_str = file.read()
+        result = busca.search(
+            reference_string=ref_str,
+            search_path="./sample_dir_hello_world",
+            include_glob="*.py",
+            count=3,
+        )
+        self.assertTrue(len(result) >= 1)
+        self.assertEqual(result[0].similarity_ratio, 1.0)
+
+    def test_single_string_exclude_glob(self):
+        with open("./sample_dir_hello_world/file_1.py", "r") as file:
+            ref_str = file.read()
+        result = busca.search(
+            reference_string=ref_str,
+            search_path="./sample_dir_hello_world",
+            exclude_glob="*.json",
+            count=10,
+        )
+        for fc in result:
+            self.assertFalse(str(fc.path).endswith(".json"))
+
+    def test_min_similarity_ratio_filters(self):
+        with open("./sample_dir_hello_world/file_1.py", "r") as file:
+            ref_str = file.read()
+        results = busca.search(
+            reference_string=ref_str,
+            search_path="./sample_dir_hello_world",
+            include_glob="*.py",
+            min_similarity_ratio=0.99,
+        )
+        self.assertTrue(len(results) >= 1)
+        for fc in results:
+            self.assertGreaterEqual(fc.similarity_ratio, 0.99)
+
+    def test_invalid_min_similarity_ratio_raises(self):
+        with self.assertRaises(ValueError):
+            busca.search(
+                reference_string="x",
+                search_path="./sample_dir_hello_world",
+                min_similarity_ratio=1.5,
+            )
+
+    def test_glob_type_error_message_includes_inner_detail(self):
+        with self.assertRaises(ValueError) as ctx:
+            busca.search(
+                reference_string="x",
+                search_path="./sample_dir_hello_world",
+                include_glob=[1, 2],
+            )
+        msg = str(ctx.exception)
+        self.assertIn("glob argument must be", msg)
+        self.assertTrue(
+            "int" in msg or "argument" in msg or "extract" in msg,
+            f"expected inner error detail in message, got: {msg}",
+        )
 
 
 class TestSearchDuration(unittest.TestCase):
@@ -93,10 +157,10 @@ class TestSearchDuration(unittest.TestCase):
 
     def test_no_globs(self):
         t1 = perf_counter()
-        _ = busca.search_for_lines(
+        _ = busca.search(
             reference_string=self.ref_str,
             search_path="./",
-            max_lines=10000,
+            max_file_lines=10000,
             count=5,
         )
         duration = perf_counter() - t1
@@ -104,12 +168,12 @@ class TestSearchDuration(unittest.TestCase):
 
     def test_only_py_files(self):
         t1 = perf_counter()
-        _ = busca.search_for_lines(
+        _ = busca.search(
             reference_string=self.ref_str,
             search_path="./",
-            max_lines=10000,
+            max_file_lines=10000,
             count=5,
-            include_globs=["*.py"],
+            include_glob=["*.py"],
         )
         duration = perf_counter() - t1
         self.assertLess(duration, 5)
@@ -117,4 +181,3 @@ class TestSearchDuration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-    example_usage()

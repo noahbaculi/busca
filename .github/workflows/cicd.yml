@@ -6,6 +6,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: cargo fmt --check
+
   build-clippy:
     name: Build and Clippy
     strategy:
@@ -13,9 +20,20 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
-      - run: cargo build
-      - run: cargo clippy -- -D warnings
+      - uses: actions/checkout@v6
+      - run: cargo build --all-targets
+      - run: cargo clippy --all-targets -- -D warnings
+
+  msrv:
+    name: MSRV 1.85
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install 1.85 --profile minimal
+      # Build the library and binary on the declared MSRV. The criterion benches
+      # need a newer compiler, so this gate covers what consumers build, not the
+      # dev-only bench target.
+      - run: cargo +1.85 build
 
   test:
     name: Test
@@ -24,14 +42,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
-      - name: Download testing comprehensive repo
-        run: |
-          git clone https://github.com/Python-World/python-mini-projects.git sample-comprehensive
-          cd sample-comprehensive
-          git reset --hard e0cfd4b0fe5e0bb4d443daba594e83332d5fb720
-          rm -r .github
-          cd -
+      - uses: actions/checkout@v6
       - run: cargo test
   
   python-test:
@@ -42,7 +53,7 @@ jobs:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Run Python tests
         run: |
           python -m venv ./python_venv
@@ -51,3 +62,15 @@ jobs:
           maturin develop --release
           python python/test.py
           python -m unittest discover
+
+  benchmark:
+    name: Benchmark
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download Django source fixture
+        run: git clone --depth 1 --branch 5.2.15 https://github.com/django/django.git sample-comprehensive
+      - run: cargo bench

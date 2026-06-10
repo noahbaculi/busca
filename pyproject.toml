@@ -7,10 +7,11 @@ module-name = "busca_py"
 
 [project]
 name = "busca_py"
+dynamic = ["version"]
 authors = [{ name = "Noah Baculi", email = "noahbaculi@gmail.com" }]
 description = "Library to search for files with content that most closely match the lines of a reference string"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",

@@ -1,31 +1,43 @@
-from typing import Optional
+import os
+from pathlib import Path
+from typing import Optional, Union
 
-class FileMatch:
+StrPath = Union[str, "os.PathLike[str]"]
+
+
+class FileComparison:
     """
-    Data structure to represent a file's match to the reference string lines. It has three attributes:
-    ...
+    The result of scoring one candidate file against the reference string.
 
     Attributes
     ----------
-    path : str
-        a string of the path to the file
-    percent_match : float
-        the ratio of line similarity between the sequences
-    lines : str
-        the contents of the file
+    path : pathlib.Path
+        Path to the candidate file.
+    similarity_ratio : float
+        `similar::TextDiff::ratio()` between the reference and the candidate,
+        a Ratcliff/Obershelp similarity in [0.0, 1.0] over the line sequences.
+        See ADR-0001.
+    content : str
+        Full contents of the candidate file.
     """
 
-    path: str
-    percent_match: float
-    lines: str
-    def __new__(cls, path: str, percent_match: float, lines: str) -> FileMatch: ...
+    path: Path
+    similarity_ratio: float
+    content: str
+    def __new__(
+        cls, path: StrPath, similarity_ratio: float, content: str
+    ) -> FileComparison: ...
 
-def search_for_lines(
+def search(
     reference_string: str,
-    search_path: str,
-    max_lines: Optional[int] = None,
+    search_path: StrPath,
+    max_file_lines: Optional[int] = None,
     count: Optional[int] = None,
-    include_globs: Optional[list[str]] = None,
-    exclude_globs: Optional[list[str]] = None,
-) -> list[FileMatch]:
-    """Search for files with content that most closely match the lines of a reference string."""
+    min_similarity_ratio: Optional[float] = None,
+    include_glob: Optional[Union[str, list[str]]] = None,
+    exclude_glob: Optional[Union[str, list[str]]] = None,
+) -> list[FileComparison]:
+    """Walk `search_path` and return a `FileComparison` for each candidate that
+    survives the include/exclude globs and `max_file_lines` filter and whose
+    `similarity_ratio` is at least `min_similarity_ratio` (when set), ranked by
+    descending `similarity_ratio`."""
