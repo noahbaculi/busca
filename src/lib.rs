@@ -397,7 +397,7 @@ fn score_candidate_bounded(
     // different tokenizers.
     if let Some(max_file_lines) = args.max_file_lines {
         let num_candidate_lines = candidate_content.lines().count();
-        if (num_candidate_lines > max_file_lines) | (num_candidate_lines == 0) {
+        if (num_candidate_lines > max_file_lines) || (num_candidate_lines == 0) {
             return None;
         }
     }
@@ -681,7 +681,7 @@ pub(crate) fn compare_file(
 
     if let Some(max_file_lines) = args.max_file_lines {
         let num_candidate_lines = candidate_content.lines().count();
-        if (num_candidate_lines > max_file_lines) | (num_candidate_lines == 0) {
+        if (num_candidate_lines > max_file_lines) || (num_candidate_lines == 0) {
             return None;
         }
     }
