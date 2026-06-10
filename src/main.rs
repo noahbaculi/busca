@@ -35,6 +35,16 @@ fn parse_similarity_ratio(s: &str) -> Result<f32, String> {
     Ok(v)
 }
 
+fn parse_count(s: &str) -> Result<usize, String> {
+    let v: usize = s
+        .parse()
+        .map_err(|e: std::num::ParseIntError| e.to_string())?;
+    if v == 0 {
+        return Err("must be at least 1".to_owned());
+    }
+    Ok(v)
+}
+
 fn main() {
     let input_args = InputArgs::parse();
 
@@ -87,12 +97,10 @@ fn main() {
             };
 
             let selected_file_comparison = &file_comparisons[ans.index];
-            let selected_file_comparison_path = &selected_file_comparison.path;
-            let candidate_content = match fs::read_to_string(selected_file_comparison_path) {
-                Ok(candidate_content) => candidate_content,
-                Err(err) => graceful_panic(&err.to_string()),
-            };
-            output_detailed_diff(&args.reference_string, &candidate_content);
+            // Reuse the content captured during the search rather than reading the
+            // file again. That keeps the diff consistent with the ranked ratio and
+            // avoids a second read that could fail if the file changed meanwhile.
+            output_detailed_diff(&args.reference_string, &selected_file_comparison.content);
         }
     }
 }
@@ -127,7 +135,7 @@ struct InputArgs {
     exclude_glob: Option<Vec<String>>,
 
     /// Number of results to display
-    #[arg(short, long, default_value_t = 10)]
+    #[arg(short, long, default_value_t = 10, value_parser = parse_count)]
     count: usize,
 
     /// Drop comparisons whose similarity ratio is below this value (in [0.0, 1.0]).
@@ -554,5 +562,28 @@ mod test_parse_similarity_ratio {
     fn rejects_non_numeric() {
         assert!(parse_similarity_ratio("abc").is_err());
         assert!(parse_similarity_ratio("").is_err());
+    }
+}
+
+#[cfg(test)]
+mod test_parse_count {
+    use super::parse_count;
+
+    #[test]
+    fn accepts_positive() {
+        assert_eq!(parse_count("1"), Ok(1));
+        assert_eq!(parse_count("10"), Ok(10));
+    }
+
+    #[test]
+    fn rejects_zero() {
+        assert!(parse_count("0").is_err());
+    }
+
+    #[test]
+    fn rejects_non_numeric() {
+        assert!(parse_count("abc").is_err());
+        assert!(parse_count("-1").is_err());
+        assert!(parse_count("").is_err());
     }
 }

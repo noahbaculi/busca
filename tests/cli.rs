@@ -92,6 +92,26 @@ fn json_count_limits_array_length() {
 }
 
 #[test]
+fn count_zero_is_rejected() {
+    let output = busca()
+        .args([
+            "-r",
+            "sample_dir_hello_world/file_1.py",
+            "-s",
+            "sample_dir_hello_world",
+            "--count",
+            "0",
+        ])
+        .output()
+        .expect("run busca");
+    // clap reports an argument-parsing failure with exit code 2, matching the
+    // grep-like "error" code the CLI uses elsewhere.
+    assert_eq!(output.status.code(), Some(2), "status: {:?}", output.status);
+    let stderr = String::from_utf8(output.stderr).expect("utf-8 stderr");
+    assert!(stderr.contains("at least 1"), "stderr: {stderr}");
+}
+
+#[test]
 fn no_interactive_prints_table_without_picker_note() {
     let output = busca()
         .args([
