@@ -39,6 +39,11 @@ def example_usage():
     new_file_comparison = busca.FileComparison("file/path", 1.0, "file\ncontent")
 
 
+class TestExampleUsage(unittest.TestCase):
+    def test_example_usage_runs(self):
+        example_usage()
+
+
 class TestSignatures(unittest.TestCase):
     def test_module_contains_functions(self):
         expected_functions = {"search"}
@@ -176,4 +181,3 @@ class TestSearchDuration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-    example_usage()
