@@ -66,7 +66,7 @@ the rationale behind the similarity metric.
 | `Args.max_lines` (Rust), `max_lines` (Python kwarg)                                                     | `max_file_lines`                                                                                 |
 | `Args.include_patterns` / `exclude_patterns`                                                            | `Args.include_glob` / `exclude_glob`                                                             |
 | `include_globs` / `exclude_globs` (Python kwargs, plural)                                               | `include_glob` / `exclude_glob` (singular)                                                       |
-| `parse_glob_pattern` was `pub` and panicked on bad globs                                                | `pub(crate)` and returns `Result<Pattern, busca::Error>`; library callers go through `Args::new` |
+| `parse_glob_pattern` was `pub` and panicked on bad globs                                                | removed; glob validation moved into `Args::new`, which returns `Error::InvalidGlob` on bad globs |
 | `compare_files` was `pub` and took `ParallelIterator<Item = Result<walkdir::DirEntry, walkdir::Error>>` | removed; library callers use `run_search` or `run_search_with_progress`                          |
 | `Args { ... }` struct-literal construction outside the crate                                            | `Args::new(...)` only (`Args` is now `#[non_exhaustive]`)                                        |
 | `requires-python = ">=3.7"`                                                                             | `requires-python = ">=3.11"`                                                                     |
