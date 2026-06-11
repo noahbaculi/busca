@@ -30,10 +30,13 @@ python -m unittest discover
 
 ## Publish the Python package to PyPI
 
-First, add the `MATURIN_USERNAME` and `MATURIN_PASSWORD` environment variables using the values of an API token from PyPI.
+`maturin` is deprecating its own upload command in favor of dedicated tools ([PyO3/maturin#2334](https://github.com/PyO3/maturin/issues/2334)), so the package is built with `maturin` and uploaded with `uv`.
 
 > Note: Publishing to PyPI requires a new version number.
 
+Build the wheel and source distribution into `target/wheels/`, then upload them with a PyPI API token:
+
 ```shell
-maturin publish
+maturin build --release --sdist
+uv publish --token pypi-... target/wheels/*
 ```
