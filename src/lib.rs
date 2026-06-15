@@ -122,16 +122,13 @@ pub fn format_file_comparisons(file_comparisons: &[FileComparison]) -> String {
     });
 
     for file_comparison in file_comparisons.iter() {
-        // Add first column with the file path
         grid.add(Cell::from(file_comparison.path.display().to_string()));
 
-        // Add second column with the visual indicator of the similarity ratio
         let visual_indicator =
             "+".repeat((file_comparison.similarity_ratio * 10.0).round() as usize);
         let vis_cell = Cell::from(visual_indicator);
         grid.add(vis_cell);
 
-        // Add third column with the numerical similarity ratio
         let perc_str = format!("{:.1}%", (file_comparison.similarity_ratio * 100.0));
         let mut perc_cell = Cell::from(perc_str);
         perc_cell.alignment = Alignment::Right;
@@ -567,9 +564,8 @@ mod test_run_search {
         reference.truncate(0);
     }
 
-    /// Creates a unique temp directory and removes it on drop, so a test can lay
-    /// out its own candidate files without an on-disk fixture or an extra
-    /// dependency.
+    /// A unique temp directory, removed on drop, so a test can lay out its own
+    /// candidate files without an on-disk fixture or an extra dependency.
     struct TempDir {
         path: PathBuf,
     }
@@ -626,7 +622,7 @@ mod test_run_search {
             14,
             "fixture should yield 14 scoreable files"
         );
-        // Counts 2 through 13 fall inside the 0.5 tie group; 14 and 100 keep all.
+        // Counts 2 through 13 fall inside the 0.5 tie group, while 14 and 100 keep all.
         for n in [1usize, 2, 7, 13, 14, 100] {
             let mut expected = reference.clone();
             expected.truncate(n);
@@ -782,7 +778,7 @@ fn quick_ratio_bound(
     if total == 0 {
         return 1.0;
     }
-    // Iterate the smaller map; the intersection sum is symmetric.
+    // Iterate the smaller map, since the intersection sum is symmetric.
     let (small, large) = if cand_counts.len() <= ref_counts.len() {
         (cand_counts, ref_counts)
     } else {
@@ -1391,7 +1387,7 @@ mod test_topn {
     #[test]
     fn ties_break_by_walk_index_ascending() {
         let mut top = TopN::new(2, 0.0);
-        // Equal ratios; lower walk index must win and sort first.
+        // Equal ratios: lower walk index must win and sort first.
         top.push(5, fc("late", 0.5));
         top.push(1, fc("early", 0.5));
         top.push(9, fc("latest", 0.5));
@@ -1410,7 +1406,7 @@ mod test_topn {
         assert!(top.should_compute(0.0), "not full: always compute");
         top.push(0, fc("a", 0.4));
         top.push(1, fc("b", 0.6));
-        // Full; threshold is the lowest kept ratio, 0.4.
+        // Full: threshold is the lowest kept ratio, 0.4.
         assert!(!top.should_compute(0.3), "below threshold: prune");
         assert!(
             top.should_compute(0.4),
