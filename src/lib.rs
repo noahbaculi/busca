@@ -57,7 +57,7 @@ impl std::error::Error for Error {
 }
 
 // FileComparison is a result object: it is returned to callers and constructed
-// via its `#[new]`, never passed back into Rust as an argument. pyo3 0.28 makes
+// via its `#[new]`, never passed back into Rust as an argument. pyo3 makes
 // the FromPyObject derive opt-in for Clone pyclasses, so we skip it.
 #[pyclass(get_all, skip_from_py_object)]
 #[derive(Debug, Clone, PartialEq)]
@@ -149,7 +149,7 @@ pub fn format_file_comparisons(file_comparisons: &[FileComparison]) -> String {
 
 /// A Python module of the Rust `busca` file matching library.
 /// https://github.com/noahbaculi/busca
-// pyo3 0.28 lets modules advertise free-threaded support by default. busca
+// pyo3 lets modules advertise free-threaded support by default. busca
 // targets GIL-based CPython and PyPy and has not been audited for the
 // free-threaded build, so we require the GIL rather than claim support we have
 // not verified.
